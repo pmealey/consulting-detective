@@ -15,6 +15,7 @@ erDiagram
     Case ||--|| CaseSetting : "setting"
 
     CausalEvent }o--|| Character : "agent"
+    CausalEvent }o--o{ Character : "involvement"
     CausalEvent }o--|| Location : "location"
     CausalEvent }o--o{ CausalEvent : "causes"
     CausalEvent }o--o{ Fact : "reveals"
@@ -35,7 +36,7 @@ erDiagram
 
 ### Key Relationships
 
-- **Events -> Characters**: Every event has an agent (who did it).
+- **Events -> Characters**: Every event has an agent (who did it) and an involvement map tracking how other characters are connected: participant, witness_visual, witness_auditory, informed_after, or discovered_evidence.
 - **Events -> Locations**: Every event happened somewhere. Location perception edges (visibleFrom, audibleFrom) constrain who could have witnessed it.
 - **Events -> Facts**: Events reveal facts to witnesses. This is the bridge between "what happened" and "what's discoverable."
 - **Characters -> Facts**: The knowledge state tracks what each character knows, suspects, or believes falsely about each fact. This shapes what they'll say in their casebook scene.
