@@ -131,6 +131,37 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       },
     });
 
+    // API Gateway origin for /api/* requests
+    const apiDomain = `${api.restApiId}.execute-api.${this.region}.amazonaws.com`;
+    const apiOrigin = new origins.HttpOrigin(apiDomain, {
+      originPath: `/${api.deploymentStage.stageName}`,
+      protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
+    });
+
+    // Origin request policy — forward query strings and Content-Type to API Gateway
+    const apiOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, 'ApiOriginRequestPolicy', {
+      originRequestPolicyName: 'ConsultingDetective-ApiOriginRequest',
+      comment: 'Forward query strings to API Gateway',
+      cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
+      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList('Content-Type'),
+      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
+    });
+
+    // CloudFront Function to strip /api prefix so API Gateway sees the real path
+    const apiRewriteFunction = new cloudfront.Function(this, 'ApiRewriteFunction', {
+      functionName: 'ConsultingDetective-ApiRewrite',
+      code: cloudfront.FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request;
+  request.uri = request.uri.replace(/^\\/api/, '');
+  if (!request.uri.startsWith('/')) {
+    request.uri = '/' + request.uri;
+  }
+  return request;
+}
+      `),
+    });
+
     const distribution = new cloudfront.Distribution(this, 'WebsiteDistribution', {
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessIdentity(websiteBucket, {
@@ -141,6 +172,19 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD_OPTIONS,
         compress: true,
         responseHeadersPolicy,
+      },
+      additionalBehaviors: {
+        '/api/*': {
+          origin: apiOrigin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: apiOriginRequestPolicy,
+          functionAssociations: [{
+            function: apiRewriteFunction,
+            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+          }],
+        },
       },
       defaultRootObject: 'index.html',
       errorResponses: [
