@@ -16,11 +16,17 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Path aliases for shared types */
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../lib/types/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src", "../lib/types"]
 }
