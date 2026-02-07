@@ -8,6 +8,9 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
+import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { join } from 'path';
 
 export class ConsultingDetectiveStack extends cdk.Stack {
@@ -56,6 +59,215 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       entry: join(__dirname, 'lambda/health/get.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
+    });
+
+    // ============================================
+    // Generation Pipeline — Lambda Functions
+    // ============================================
+
+    const generationEnvironment = {
+      ...lambdaEnvironment,
+      BEDROCK_DEFAULT_MODEL_ID: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    };
+
+    // Longer timeout + more memory for LLM-calling steps
+    const generationLambdaConfig = {
+      ...bundlingConfig,
+      timeout: cdk.Duration.minutes(5),
+      memorySize: 512,
+    };
+
+    // Prose generation gets extra time and tokens
+    const proseLambdaConfig = {
+      ...generationLambdaConfig,
+      timeout: cdk.Duration.minutes(10),
+      memorySize: 1024,
+    };
+
+    const selectTemplateHandler = new nodejs.NodejsFunction(this, 'SelectTemplateHandler', {
+      entry: join(__dirname, 'lambda/generate/select-template.ts'),
+      environment: generationEnvironment,
+      ...generationLambdaConfig,
+    });
+
+    const generateEventsHandler = new nodejs.NodejsFunction(this, 'GenerateEventsHandler', {
+      entry: join(__dirname, 'lambda/generate/generate-events.ts'),
+      environment: generationEnvironment,
+      ...generationLambdaConfig,
+    });
+
+    const populateCharactersHandler = new nodejs.NodejsFunction(this, 'PopulateCharactersHandler', {
+      entry: join(__dirname, 'lambda/generate/populate-characters.ts'),
+      environment: generationEnvironment,
+      ...generationLambdaConfig,
+    });
+
+    const buildLocationsHandler = new nodejs.NodejsFunction(this, 'BuildLocationsHandler', {
+      entry: join(__dirname, 'lambda/generate/build-locations.ts'),
+      environment: generationEnvironment,
+      ...generationLambdaConfig,
+    });
+
+    const distributeFactsHandler = new nodejs.NodejsFunction(this, 'DistributeFactsHandler', {
+      entry: join(__dirname, 'lambda/generate/distribute-facts.ts'),
+      environment: generationEnvironment,
+      ...generationLambdaConfig,
+    });
+
+    const designCasebookHandler = new nodejs.NodejsFunction(this, 'DesignCasebookHandler', {
+      entry: join(__dirname, 'lambda/generate/design-casebook.ts'),
+      environment: generationEnvironment,
+      ...generationLambdaConfig,
+    });
+
+    const generateProseHandler = new nodejs.NodejsFunction(this, 'GenerateProseHandler', {
+      entry: join(__dirname, 'lambda/generate/generate-prose.ts'),
+      environment: generationEnvironment,
+      ...proseLambdaConfig,
+    });
+
+    const createQuestionsHandler = new nodejs.NodejsFunction(this, 'CreateQuestionsHandler', {
+      entry: join(__dirname, 'lambda/generate/create-questions.ts'),
+      environment: generationEnvironment,
+      ...generationLambdaConfig,
+    });
+
+    const computeOptimalPathHandler = new nodejs.NodejsFunction(this, 'ComputeOptimalPathHandler', {
+      entry: join(__dirname, 'lambda/generate/compute-optimal-path.ts'),
+      environment: lambdaEnvironment,
+      ...bundlingConfig,
+      timeout: cdk.Duration.seconds(30),
+    });
+
+    const validateCoherenceHandler = new nodejs.NodejsFunction(this, 'ValidateCoherenceHandler', {
+      entry: join(__dirname, 'lambda/generate/validate-coherence.ts'),
+      environment: lambdaEnvironment,
+      ...bundlingConfig,
+      timeout: cdk.Duration.seconds(30),
+    });
+
+    const storeCaseHandler = new nodejs.NodejsFunction(this, 'StoreCaseHandler', {
+      entry: join(__dirname, 'lambda/generate/store-case.ts'),
+      environment: lambdaEnvironment,
+      ...bundlingConfig,
+      timeout: cdk.Duration.seconds(30),
+    });
+
+    // ============================================
+    // Generation Pipeline — IAM Permissions
+    // ============================================
+
+    // Bedrock InvokeModel for all LLM-calling lambdas (includes inference profiles)
+    const bedrockPolicy = new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+      resources: [
+        'arn:aws:bedrock:*::foundation-model/*',
+        `arn:aws:bedrock:*:${this.account}:inference-profile/*`,
+        'arn:aws:bedrock:*:*:inference-profile/*',
+      ],
+    });
+
+    // Marketplace permissions required for auto-enabling model access on first invocation
+    const marketplacePolicy = new iam.PolicyStatement({
+      actions: ['aws-marketplace:ViewSubscriptions', 'aws-marketplace:Subscribe'],
+      resources: ['*'],
+    });
+
+    const llmHandlers = [
+      selectTemplateHandler,
+      generateEventsHandler,
+      populateCharactersHandler,
+      buildLocationsHandler,
+      distributeFactsHandler,
+      designCasebookHandler,
+      generateProseHandler,
+      createQuestionsHandler,
+    ];
+
+    for (const handler of llmHandlers) {
+      handler.addToRolePolicy(bedrockPolicy);
+      handler.addToRolePolicy(marketplacePolicy);
+    }
+
+    // DynamoDB write for store step
+    casesTable.grantWriteData(storeCaseHandler);
+
+    // ============================================
+    // Generation Pipeline — Step Functions
+    // ============================================
+
+    const selectTemplate = new tasks.LambdaInvoke(this, 'SelectTemplate', {
+      lambdaFunction: selectTemplateHandler,
+      outputPath: '$.Payload',
+    });
+
+    const generateEvents = new tasks.LambdaInvoke(this, 'GenerateEvents', {
+      lambdaFunction: generateEventsHandler,
+      outputPath: '$.Payload',
+    });
+
+    const populateCharacters = new tasks.LambdaInvoke(this, 'PopulateCharacters', {
+      lambdaFunction: populateCharactersHandler,
+      outputPath: '$.Payload',
+    });
+
+    const buildLocations = new tasks.LambdaInvoke(this, 'BuildLocations', {
+      lambdaFunction: buildLocationsHandler,
+      outputPath: '$.Payload',
+    });
+
+    const distributeFacts = new tasks.LambdaInvoke(this, 'DistributeFacts', {
+      lambdaFunction: distributeFactsHandler,
+      outputPath: '$.Payload',
+    });
+
+    const designCasebook = new tasks.LambdaInvoke(this, 'DesignCasebook', {
+      lambdaFunction: designCasebookHandler,
+      outputPath: '$.Payload',
+    });
+
+    const generateProse = new tasks.LambdaInvoke(this, 'GenerateProse', {
+      lambdaFunction: generateProseHandler,
+      outputPath: '$.Payload',
+    });
+
+    const createQuestions = new tasks.LambdaInvoke(this, 'CreateQuestions', {
+      lambdaFunction: createQuestionsHandler,
+      outputPath: '$.Payload',
+    });
+
+    const computeOptimalPath = new tasks.LambdaInvoke(this, 'ComputeOptimalPath', {
+      lambdaFunction: computeOptimalPathHandler,
+      outputPath: '$.Payload',
+    });
+
+    const validateCoherence = new tasks.LambdaInvoke(this, 'ValidateCoherence', {
+      lambdaFunction: validateCoherenceHandler,
+      outputPath: '$.Payload',
+    });
+
+    const storeCase = new tasks.LambdaInvoke(this, 'StoreCase', {
+      lambdaFunction: storeCaseHandler,
+      outputPath: '$.Payload',
+    });
+
+    // Chain the steps into a sequential pipeline
+    const pipelineDefinition = selectTemplate
+      .next(generateEvents)
+      .next(populateCharacters)
+      .next(buildLocations)
+      .next(distributeFacts)
+      .next(designCasebook)
+      .next(generateProse)
+      .next(createQuestions)
+      .next(computeOptimalPath)
+      .next(validateCoherence)
+      .next(storeCase);
+
+    const generationStateMachine = new sfn.StateMachine(this, 'CaseGenerationPipeline', {
+      stateMachineName: 'ConsultingDetective-CaseGeneration',
+      definitionBody: sfn.DefinitionBody.fromChainable(pipelineDefinition),
+      timeout: cdk.Duration.minutes(30),
     });
 
     // ============================================
@@ -235,6 +447,11 @@ function handler(event) {
     new cdk.CfnOutput(this, 'WebsiteBucketName', {
       value: websiteBucket.bucketName,
       description: 'S3 Website Bucket Name',
+    });
+
+    new cdk.CfnOutput(this, 'GenerationStateMachineArn', {
+      value: generationStateMachine.stateMachineArn,
+      description: 'Case Generation Step Functions State Machine ARN',
     });
   }
 }
