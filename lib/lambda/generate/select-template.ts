@@ -87,9 +87,6 @@ Think through your creative choices first, then provide the JSON object.`;
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,
-      outputTokens: 1024,
-      thinkingTokens: 2048,
-      temperature: 0.9,
     },
     (raw) => CaseTemplateSchema.parse(raw),
   );

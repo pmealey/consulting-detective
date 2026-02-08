@@ -140,9 +140,6 @@ Pay close attention to the errors above. Ensure every fact is reachable from the
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,
-      outputTokens: 8096,
-      thinkingTokens: 12288,
-      temperature: 0.7,
     },
     (raw) => CasebookSchema.parse(raw),
   );

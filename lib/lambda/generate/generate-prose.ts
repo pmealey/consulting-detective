@@ -91,9 +91,6 @@ Write the introduction. Plan your approach first, then provide the JSON.`;
       systemPrompt: introSystemPrompt,
       userPrompt: introUserPrompt,
       modelConfig: input.modelConfig,
-      outputTokens: 1024,
-      thinkingTokens: 2048,
-      temperature: 0.8,
     },
     (raw) => IntroductionSchema.parse(raw),
   );
@@ -136,8 +133,6 @@ Provide the JSON mapping entryId -> scene text.`;
       systemPrompt: scenesSystemPrompt,
       userPrompt: scenesUserPrompt,
       modelConfig: input.modelConfig,
-      outputTokens: 8192,
-      thinkingTokens: 4096,
     },
     (raw) => SceneBatchSchema.parse(raw),
   );

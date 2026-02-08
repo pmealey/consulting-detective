@@ -38,6 +38,45 @@ function expandModelId(idOrShortcut: string): string {
 }
 
 // ============================================
+// Model Max Output Tokens
+// ============================================
+
+/**
+ * Maximum output tokens (thinking + text combined) for each model.
+ * Used to set maxTokens to the model's ceiling so output is never truncated.
+ * The thinking budget is set to half the max, leaving the other half for text.
+ *
+ * Source: https://platform.claude.com/docs/en/about-claude/models/overview
+ *
+ * Keyed by full Bedrock inference profile ID.
+ */
+const MODEL_MAX_OUTPUT_TOKENS: Record<string, number> = {
+  // Haiku 4.5 — max output 64K
+  'us.anthropic.claude-haiku-4-5-20251001-v1:0': 64000,
+  // Sonnet 4.5 — max output 64K
+  'us.anthropic.claude-sonnet-4-5-20250929-v1:0': 64000,
+  // Sonnet 4 — max output 64K
+  'us.anthropic.claude-sonnet-4-20250514-v1:0': 64000,
+  // Opus 4.6 — max output 128K
+  'us.anthropic.claude-opus-4-6-v1': 128000,
+  // Opus 4.5 — max output 64K
+  'us.anthropic.claude-opus-4-5-20251101-v1:0': 64000,
+  // Opus 4.1 — max output 32K (legacy)
+  'us.anthropic.claude-opus-4-1-20250805-v1:0': 32000,
+};
+
+/** Conservative fallback if we don't recognise the model ID. */
+const DEFAULT_MAX_OUTPUT_TOKENS = 32768;
+
+/**
+ * Look up the maximum output tokens for a resolved model ID.
+ * Falls back to DEFAULT_MAX_OUTPUT_TOKENS for unknown models.
+ */
+function getModelMaxOutputTokens(modelId: string): number {
+  return MODEL_MAX_OUTPUT_TOKENS[modelId] ?? DEFAULT_MAX_OUTPUT_TOKENS;
+}
+
+// ============================================
 // Model Resolution
 // ============================================
 
@@ -76,19 +115,7 @@ export interface CallModelOptions {
   userPrompt: string;
   /** Per-step model config (passed through the generation state) */
   modelConfig?: GenerationModelConfig;
-  /**
-   * Max tokens for the JSON output. Defaults to 4096.
-   * This is the space reserved for the model's text response (the JSON payload).
-   * The actual `maxTokens` sent to the API = outputTokens + thinkingTokens.
-   */
-  outputTokens?: number;
-  /**
-   * Token budget for extended thinking (model's internal reasoning).
-   * Set to 0 to disable extended thinking. Defaults to 4096.
-   * Minimum when enabled is 1024 (Bedrock requirement).
-   */
-  thinkingTokens?: number;
-  /** Temperature. Defaults to 0.7 for creative generation. Ignored when thinking is enabled. */
+  /** Temperature. Defaults to 0.7 for creative generation. Ignored when thinking is enabled (always enabled). */
   temperature?: number;
   /** Number of retry attempts for malformed JSON. Defaults to 2. */
   maxRetries?: number;
@@ -128,15 +155,17 @@ export async function callModel<T>(
     systemPrompt,
     userPrompt,
     modelConfig,
-    outputTokens = 4096,
-    thinkingTokens = 4096,
     temperature = 0.7,
     maxRetries = 2,
   } = options;
 
   const modelId = resolveModelId(stepName, modelConfig);
-  const thinkingEnabled = thinkingTokens > 0;
-  const maxTokens = thinkingEnabled ? outputTokens + thinkingTokens : outputTokens;
+
+  // Resolve token limits from the model's maximum — no per-step budgets needed.
+  // Extended thinking is always enabled; budget gets half the model's max.
+  const modelMax = getModelMaxOutputTokens(modelId);
+  const thinkingTokens = Math.floor(modelMax / 2);
+  const maxTokens = modelMax;
 
   const messages: Message[] = [
     {
@@ -153,26 +182,21 @@ export async function callModel<T>(
 
     // Build inference config — temperature is incompatible with extended thinking
     const inferenceConfig: InferenceConfiguration = { maxTokens };
-    if (!thinkingEnabled) {
-      inferenceConfig.temperature = temperature;
-    }
 
-    // Build additional model fields for extended thinking
-    const additionalModelRequestFields: DocumentType | undefined = thinkingEnabled
-      ? {
-          thinking: {
-            type: 'enabled',
-            budget_tokens: thinkingTokens,
-          },
-        }
-      : undefined;
+    // Extended thinking is always enabled
+    const additionalModelRequestFields: DocumentType = {
+      thinking: {
+        type: 'enabled',
+        budget_tokens: thinkingTokens,
+      },
+    };
 
     const command = new ConverseCommand({
       modelId,
       system: [{ text: systemPrompt }],
       messages,
       inferenceConfig,
-      ...(additionalModelRequestFields ? { additionalModelRequestFields } : {}),
+      additionalModelRequestFields,
     });
 
     const response = await client.send(command);
@@ -183,16 +207,13 @@ export async function callModel<T>(
     const { reasoning, text } = extractContent(response.output?.message?.content);
     rawText = text;
 
-    // Determine the JSON string to parse:
-    // - If extended thinking is enabled, the text block should be pure JSON
-    //   (but fall back to splitReasoningAndJson just in case the model mixes them)
-    // - Otherwise, split the reasoning preamble from JSON the legacy way
+    // Extended thinking separates reasoning into its own content block.
+    // The text block should be pure JSON, but we still run through
+    // splitReasoningAndJson in case the model wrapped it in a fence.
     let jsonStr: string;
     let extractedReasoning: string;
 
-    if (thinkingEnabled && reasoning) {
-      // Thinking was separated by the API — text should be JSON
-      // Still run through split in case the model wrapped it in a fence
+    if (reasoning) {
       const split = splitReasoningAndJson(text);
       jsonStr = split.jsonStr;
       // Combine API-level reasoning with any inline reasoning (shouldn't happen, but be safe)
@@ -215,7 +236,8 @@ export async function callModel<T>(
       usage,
       reasoning: extractedReasoning,
       rawText: text,
-      thinkingEnabled,
+      maxTokens,
+      thinkingBudget: thinkingTokens,
     });
 
     // Try to parse JSON from the response
@@ -272,13 +294,29 @@ interface LogCallParams {
   usage?: TokenUsage;
   reasoning: string;
   rawText: string;
-  thinkingEnabled: boolean;
+  maxTokens: number;
+  thinkingBudget: number;
 }
 
 function logCall(params: LogCallParams): void {
-  const { stepName, modelId, attempt, maxAttempts, latencyMs, usage, reasoning, rawText, thinkingEnabled } = params;
+  const { stepName, modelId, attempt, maxAttempts, latencyMs, usage, reasoning, rawText, maxTokens, thinkingBudget } = params;
 
-  // Structured summary line
+  const inputTokens = usage?.inputTokens ?? 0;
+  const outputTokens = usage?.outputTokens ?? 0;
+  const totalTokens = usage?.totalTokens ?? 0;
+
+  // Estimate thinking vs text tokens from the response.
+  // The Bedrock API reports total outputTokens (thinking + text combined).
+  // We can approximate text tokens from the raw response length (~4 chars/token)
+  // and infer thinking tokens as the remainder.
+  const estimatedTextTokens = Math.ceil(rawText.length / 4);
+  const estimatedThinkingTokens = Math.max(0, outputTokens - estimatedTextTokens);
+
+  // Utilisation percentages
+  const outputUtilPct = maxTokens > 0 ? ((outputTokens / maxTokens) * 100).toFixed(1) : '0.0';
+  const thinkingUtilPct = thinkingBudget > 0 ? ((estimatedThinkingTokens / thinkingBudget) * 100).toFixed(1) : '0.0';
+
+  // Structured summary line with detailed token usage
   console.log(
     JSON.stringify({
       event: 'bedrock_call',
@@ -286,16 +324,25 @@ function logCall(params: LogCallParams): void {
       model: modelId,
       attempt: `${attempt}/${maxAttempts}`,
       latencyMs,
-      inputTokens: usage?.inputTokens ?? null,
-      outputTokens: usage?.outputTokens ?? null,
-      totalTokens: usage?.totalTokens ?? null,
-      thinkingEnabled,
+      tokens: {
+        input: inputTokens,
+        output: outputTokens,
+        total: totalTokens,
+        estimatedThinking: estimatedThinkingTokens,
+        estimatedText: estimatedTextTokens,
+      },
+      budget: {
+        maxTokens,
+        thinkingBudget,
+        outputUtilisation: `${outputUtilPct}%`,
+        thinkingUtilisation: `${thinkingUtilPct}%`,
+      },
     }),
   );
 
-  // Reasoning (from extended thinking API or from inline preamble)
+  // Reasoning (from extended thinking API)
   if (reasoning) {
-    console.log(`[${stepName}] --- Model reasoning${thinkingEnabled ? ' (extended thinking)' : ''} ---`);
+    console.log(`[${stepName}] --- Model reasoning (extended thinking) ---`);
     console.log(reasoning);
     console.log(`[${stepName}] --- End reasoning ---`);
   }
@@ -319,8 +366,8 @@ function logCall(params: LogCallParams): void {
 /**
  * Extract reasoning and text content from Bedrock Converse response content blocks.
  *
- * When extended thinking is enabled, the response contains separate `reasoningContent`
- * and `text` content blocks. When not enabled, everything comes as `text` blocks.
+ * Extended thinking is always enabled, so the response contains separate
+ * `reasoningContent` and `text` content blocks.
  */
 function extractContent(content?: ContentBlock[]): { reasoning: string; text: string } {
   if (!content) return { reasoning: '', text: '' };
@@ -350,10 +397,9 @@ function extractContent(content?: ContentBlock[]): { reasoning: string; text: st
 /**
  * Split a model response into reasoning preamble and JSON content.
  *
- * This is the **fallback** path used when extended thinking is not enabled
- * (or as a safety net when it is). When extended thinking is active the
- * reasoning arrives in a separate API content block and the text block
- * should be pure JSON — but we still run this just in case.
+ * With extended thinking enabled, reasoning arrives in a separate API content
+ * block and the text block should be pure JSON. This function is a safety net
+ * in case the model wraps the JSON in a markdown fence or includes preamble.
  *
  * Strategy:
  *   1. Try the LAST markdown-fenced block that contains valid-looking JSON.

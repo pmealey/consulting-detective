@@ -112,9 +112,6 @@ ${questionValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,
-      outputTokens: 2048,
-      thinkingTokens: 2048,
-      temperature: 0.7,
     },
     (raw) => QuestionsSchema.parse(raw),
   );

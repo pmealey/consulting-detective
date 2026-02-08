@@ -105,9 +105,6 @@ ${characterValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,
-      outputTokens: 4096,
-      thinkingTokens: 4096,
-      temperature: 0.8,
     },
     (raw) => PopulateCharactersResultSchema.parse(raw),
   );

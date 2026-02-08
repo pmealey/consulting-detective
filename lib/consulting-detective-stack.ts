@@ -156,56 +156,56 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       entry: join(__dirname, 'lambda/generate/compute-optimal-path.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.minutes(15),
     });
 
     const validateDiscoveryGraphHandler = new nodejs.NodejsFunction(this, 'ValidateDiscoveryGraphHandler', {
       entry: join(__dirname, 'lambda/generate/validate-discovery-graph.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.minutes(15),
     });
 
     const validateEventsHandler = new nodejs.NodejsFunction(this, 'ValidateEventsHandler', {
       entry: join(__dirname, 'lambda/generate/validate-events.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.minutes(15),
     });
 
     const validateCharactersHandler = new nodejs.NodejsFunction(this, 'ValidateCharactersHandler', {
       entry: join(__dirname, 'lambda/generate/validate-characters.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.minutes(15),
     });
 
     const validateLocationsHandler = new nodejs.NodejsFunction(this, 'ValidateLocationsHandler', {
       entry: join(__dirname, 'lambda/generate/validate-locations.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.minutes(15),
     });
 
     const validateQuestionsHandler = new nodejs.NodejsFunction(this, 'ValidateQuestionsHandler', {
       entry: join(__dirname, 'lambda/generate/validate-questions.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.minutes(15),
     });
 
     const validateCoherenceHandler = new nodejs.NodejsFunction(this, 'ValidateCoherenceHandler', {
       entry: join(__dirname, 'lambda/generate/validate-coherence.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.minutes(15),
     });
 
     const storeCaseHandler = new nodejs.NodejsFunction(this, 'StoreCaseHandler', {
       entry: join(__dirname, 'lambda/generate/store-case.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.minutes(15),
     });
 
     // ============================================

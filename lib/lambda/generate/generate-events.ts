@@ -93,9 +93,6 @@ ${eventValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,
-      outputTokens: 2048,
-      thinkingTokens: 4096,
-      temperature: 0.8,
     },
     (raw) => EventsSchema.parse(raw),
   );

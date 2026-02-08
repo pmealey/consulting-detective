@@ -111,9 +111,6 @@ Define all facts. Each placeholder must become a concrete fact. Create person fa
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,
-      outputTokens: 2048,
-      thinkingTokens: 2048,
-      temperature: 0.7,
     },
     (raw) => GenerateFactsResultSchema.parse(raw),
   );
