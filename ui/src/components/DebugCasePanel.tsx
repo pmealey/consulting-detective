@@ -8,6 +8,10 @@ import type {
   Fact,
   Question,
 } from '@shared/index';
+import { DiscoveryGraph } from './debug/DiscoveryGraph.tsx';
+import { EventsGraph } from './debug/EventsGraph.tsx';
+import { LocationsGraph } from './debug/LocationsGraph.tsx';
+import { CasebookGraph } from './debug/CasebookGraph.tsx';
 
 const SECTIONS = [
   'Overview',
@@ -21,6 +25,8 @@ const SECTIONS = [
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number];
+
+const SECTIONS_WITH_GRAPH: SectionId[] = ['Discovery', 'Events', 'Locations', 'Casebook'];
 
 interface DebugCasePanelProps {
   gameCase: Case;
@@ -522,23 +528,51 @@ function QuestionsSection({ gameCase }: { gameCase: Case }) {
   );
 }
 
+type SectionViewMode = 'data' | 'graph';
+
 export function DebugCasePanel({ gameCase, onClose }: DebugCasePanelProps) {
   const [activeSection, setActiveSection] = useState<SectionId>('Overview');
+  const [sectionView, setSectionView] = useState<Record<SectionId, SectionViewMode>>(() => {
+    const init: Record<string, SectionViewMode> = {};
+    SECTIONS.forEach((id) => {
+      init[id] = 'data';
+    });
+    return init as Record<SectionId, SectionViewMode>;
+  });
 
-  const renderSection = () => {
+  const hasGraph = SECTIONS_WITH_GRAPH.includes(activeSection);
+  const viewMode = sectionView[activeSection];
+
+  const renderSectionContent = () => {
     switch (activeSection) {
       case 'Overview':
         return <OverviewSection gameCase={gameCase} />;
       case 'Discovery':
-        return <DiscoverySection gameCase={gameCase} />;
+        return viewMode === 'graph' ? (
+          <DiscoveryGraph gameCase={gameCase} />
+        ) : (
+          <DiscoverySection gameCase={gameCase} />
+        );
       case 'Events':
-        return <EventsSection gameCase={gameCase} />;
+        return viewMode === 'graph' ? (
+          <EventsGraph gameCase={gameCase} />
+        ) : (
+          <EventsSection gameCase={gameCase} />
+        );
       case 'Characters':
         return <CharactersSection gameCase={gameCase} />;
       case 'Locations':
-        return <LocationsSection gameCase={gameCase} />;
+        return viewMode === 'graph' ? (
+          <LocationsGraph gameCase={gameCase} />
+        ) : (
+          <LocationsSection gameCase={gameCase} />
+        );
       case 'Casebook':
-        return <CasebookSection gameCase={gameCase} />;
+        return viewMode === 'graph' ? (
+          <CasebookGraph gameCase={gameCase} />
+        ) : (
+          <CasebookSection gameCase={gameCase} />
+        );
       case 'Facts':
         return <FactsSection gameCase={gameCase} />;
       case 'Questions':
@@ -587,8 +621,40 @@ export function DebugCasePanel({ gameCase, onClose }: DebugCasePanelProps) {
             </button>
           ))}
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto p-4">
-          {renderSection()}
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {hasGraph && (
+            <div className="shrink-0 flex gap-1 px-4 py-2 border-b border-stone-200 bg-stone-50">
+              <button
+                type="button"
+                onClick={() =>
+                  setSectionView((prev) => ({ ...prev, [activeSection]: 'data' }))
+                }
+                className={`shrink-0 px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  viewMode === 'data'
+                    ? 'bg-stone-700 text-white'
+                    : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                }`}
+              >
+                Data
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setSectionView((prev) => ({ ...prev, [activeSection]: 'graph' }))
+                }
+                className={`shrink-0 px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  viewMode === 'graph'
+                    ? 'bg-stone-700 text-white'
+                    : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                }`}
+              >
+                Graph
+              </button>
+            </div>
+          )}
+          <div className="flex-1 min-h-0 overflow-y-auto p-4">
+            {renderSectionContent()}
+          </div>
         </div>
       </div>
     </div>
