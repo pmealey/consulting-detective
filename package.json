@@ -9,10 +9,13 @@
     "watch": "tsc -w",
     "cdk": "cdk",
     "dev": "npm run dev --prefix ui",
-    "synth": "npx cdk synth",
-    "diff": "npx cdk diff",
-    "deploy": "npm run build && npm run build --prefix ui && npx cdk deploy",
-    "destroy": "npx cdk destroy"
+    "synth": "npx cdk synth --all",
+    "diff": "npx cdk diff --all",
+    "deploy": "npm run build && npm run build --prefix ui && npx cdk deploy --all",
+    "deploy:infra": "npm run build && npx cdk deploy ConsultingDetectiveInfraStack",
+    "deploy:app": "npm run build && npm run build --prefix ui && npx cdk deploy ConsultingDetectiveStack",
+    "destroy": "npx cdk destroy ConsultingDetectiveStack",
+    "destroy:all": "npx cdk destroy --all"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.159",

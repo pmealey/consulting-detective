@@ -15,7 +15,8 @@ A **daily mystery game** inspired by *Sherlock Holmes, Consulting Detective* tab
 | `MOONSTONE_LINEAGE.md` | How the data model descends from the moonstone-packet project |
 | `DESIGN_DECISIONS.md` | Rationale for specific design choices -- read before proposing structural changes |
 | `lib/types/` | **Source of truth** for the case data model. Read these first. |
-| `lib/consulting-detective-stack.ts` | CDK stack (DDB, Lambda, API Gateway, S3+CloudFront) |
+| `lib/infrastructure-stack.ts` | CDK infrastructure stack (DynamoDB -- persistent data) |
+| `lib/consulting-detective-stack.ts` | CDK application stack (Lambda, API Gateway, S3+CloudFront, Step Functions) |
 | `lib/lambda/` | Backend Lambda handlers |
 | `ui/` | React + Vite + Tailwind frontend (separate npm package) |
 
@@ -41,7 +42,8 @@ The `the-moonstone-packet` project (sibling directory) extracts narrative struct
 
 - **Shared types**: `lib/types/` -- pure type exports, no runtime code
 - **Lambda handlers**: `lib/lambda/<domain>/<action>.ts` -- use shared utilities from `lib/lambda/shared/`
-- **CDK stack**: `lib/consulting-detective-stack.ts`
+- **Infrastructure stack**: `lib/infrastructure-stack.ts` -- persistent data resources only (DynamoDB)
+- **Application stack**: `lib/consulting-detective-stack.ts` -- stateless resources (Lambdas, API Gateway, CloudFront, S3, Step Functions)
 - **UI components**: `ui/src/` -- import shared types via `@shared/*` alias
 
 ## Build and Deploy
@@ -54,14 +56,28 @@ npm install --prefix ui  # frontend
 # Local dev (frontend against deployed backend)
 npm run dev              # runs Vite dev server in ui/
 
-# Deploy everything
-npm run deploy           # builds backend + UI, then cdk deploy
+# Deploy everything (both stacks)
+npm run deploy           # builds backend + UI, then cdk deploy --all
+
+# Deploy individually
+npm run deploy:infra     # infrastructure stack only (DynamoDB)
+npm run deploy:app       # application stack only (Lambdas, API, CloudFront, etc.)
 
 # CDK operations
-npm run synth            # synthesize CloudFormation template
-npm run diff             # show pending changes
-npm run destroy          # tear down stack
+npm run synth            # synthesize all CloudFormation templates
+npm run diff             # show pending changes across all stacks
+npm run destroy          # tear down APPLICATION stack only (safe -- preserves data)
+npm run destroy:all      # tear down ALL stacks (destructive -- use with caution)
 ```
+
+## Stack Separation Pattern
+
+Resources are split across two CloudFormation stacks:
+
+- **InfrastructureStack** (`ConsultingDetectiveInfraStack`): Resources that hold persistent data and use custom names. These have `removalPolicy: RETAIN` and must survive application redeployments. Currently: DynamoDB tables.
+- **ConsultingDetectiveStack** (`ConsultingDetectiveStack`): All stateless resources -- Lambdas, API Gateway, CloudFront, S3 (static assets), Step Functions. Can be freely torn down and recreated. Receives persistent resources as constructor props from the infrastructure stack.
+
+When adding new resources, ask: "Does this hold data I can't regenerate?" If yes, it goes in the infrastructure stack. Everything else goes in the application stack.
 
 ## Don'ts
 
@@ -69,3 +85,5 @@ npm run destroy          # tear down stack
 - Don't add runtime code to `lib/types/`. It's type-only.
 - Don't store derived properties on the data model.
 - Don't add `.js` extensions to imports in `lib/types/`. Use extensionless imports.
+- Don't put stateless resources in the infrastructure stack.
+- Don't put data-bearing resources in the application stack.

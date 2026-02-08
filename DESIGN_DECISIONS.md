@@ -127,3 +127,22 @@ Setup required:
 **Rationale**: The `.js` extension convention exists because `NodeNext` mirrors how Node.js resolves modules at runtime -- and at runtime, the files are `.js`. But `import type` statements are erased entirely at compile time; they never resolve at runtime. Both the root tsconfig (`NodeNext`) and the UI tsconfig (`bundler`) accept extensionless `import type` statements.
 
 The practical trigger for this decision: Cursor's language server was flagging the `.js` imports with "Cannot find module './fact.js'" errors in the editor, even though `tsc` compiled cleanly. Extensionless imports are correct for both compilation targets and don't produce editor warnings.
+
+---
+
+## Infrastructure / Application Stack Separation
+
+**Decision**: CDK resources are split into two stacks: `InfrastructureStack` (persistent data) and `ConsultingDetectiveStack` (stateless compute).
+
+**Alternatives considered**:
+1. A single stack for everything (the original design).
+2. Per-service stacks (one for API, one for generation, one for frontend, etc.).
+
+**Rationale**: CloudFormation cannot replace a custom-named resource in-place. When the DynamoDB table's key schema needed to change, the deploy failed because the table had a hardcoded `tableName` and `RETAIN` removal policy -- CloudFormation couldn't delete the old table to make room for the new one, even after the table was manually deleted, because it still existed in CloudFormation's state.
+
+Separating persistent resources into their own stack solves this:
+- The infrastructure stack changes rarely. DynamoDB table schema changes are infrequent and can be managed carefully.
+- The application stack can be freely destroyed and recreated without affecting stored data. This makes it safe to rename resources, change custom names, or restructure compute.
+- `npm run destroy` targets only the application stack by default, preventing accidental data loss.
+
+The rule is simple: if a resource holds data you can't regenerate, it goes in the infrastructure stack. Everything else goes in the application stack. The infrastructure stack exports resource references (table ARN, etc.) and the application stack receives them as constructor props.

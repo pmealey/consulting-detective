@@ -13,21 +13,27 @@ import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { join } from 'path';
 
+/**
+ * Application stack props -- receives persistent resources from the
+ * infrastructure stack.
+ */
+export interface ConsultingDetectiveStackProps extends cdk.StackProps {
+  /** The DynamoDB cases table from the infrastructure stack. */
+  casesTable: dynamodb.ITable;
+}
+
+/**
+ * Application stack -- all stateless resources that can be freely torn down
+ * and recreated: Lambdas, API Gateway, CloudFront, S3 (static assets),
+ * Step Functions, and the deployment pipeline.
+ *
+ * Persistent data resources (DynamoDB) live in the infrastructure stack.
+ */
 export class ConsultingDetectiveStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: ConsultingDetectiveStackProps) {
     super(scope, id, props);
 
-    // ============================================
-    // DynamoDB Tables
-    // ============================================
-
-    const casesTable = new dynamodb.Table(this, 'CasesTable', {
-      tableName: 'ConsultingDetective-Cases',
-      partitionKey: { name: 'caseDate', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'caseId', type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
-    });
+    const { casesTable } = props;
 
     // ============================================
     // Lambda Environment Variables
@@ -57,6 +63,20 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     // Health check handler
     const healthHandler = new nodejs.NodejsFunction(this, 'HealthHandler', {
       entry: join(__dirname, 'lambda/health/get.ts'),
+      environment: lambdaEnvironment,
+      ...bundlingConfig,
+    });
+
+    // List cases handler
+    const listCasesHandler = new nodejs.NodejsFunction(this, 'ListCasesHandler', {
+      entry: join(__dirname, 'lambda/cases/list.ts'),
+      environment: lambdaEnvironment,
+      ...bundlingConfig,
+    });
+
+    // Get case handler
+    const getCaseHandler = new nodejs.NodejsFunction(this, 'GetCaseHandler', {
+      entry: join(__dirname, 'lambda/cases/get.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
     });
@@ -275,6 +295,8 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     // ============================================
 
     casesTable.grantReadData(healthHandler);
+    casesTable.grantReadData(listCasesHandler);
+    casesTable.grantReadData(getCaseHandler);
 
     // ============================================
     // API Gateway
@@ -294,6 +316,13 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     const health = api.root.addResource('health');
     health.addMethod('GET', new apigateway.LambdaIntegration(healthHandler));
 
+    // Cases routes
+    const cases = api.root.addResource('cases');
+    cases.addMethod('GET', new apigateway.LambdaIntegration(listCasesHandler));
+
+    const singleCase = cases.addResource('{caseDate}');
+    singleCase.addMethod('GET', new apigateway.LambdaIntegration(getCaseHandler));
+
     // ============================================
     // S3 Bucket for Frontend Hosting
     // ============================================
@@ -304,8 +333,8 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       websiteErrorDocument: 'index.html',
       publicReadAccess: false,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
-      autoDeleteObjects: false,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
     });
 
     // ============================================
