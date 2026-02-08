@@ -12,6 +12,7 @@ import { CasebookEntryView } from '../components/CasebookEntryView.tsx';
 import { FactsList } from '../components/FactsList.tsx';
 import { QuestionForm } from '../components/QuestionForm.tsx';
 import { ResultsView } from '../components/ResultsView.tsx';
+import { DebugCasePanel } from '../components/DebugCasePanel.tsx';
 import type { Case, PlayerSession, PlayerAnswer, CaseResult } from '@shared/index';
 
 type Phase = 'loading' | 'investigation' | 'questions' | 'results';
@@ -36,6 +37,8 @@ export function CasePage() {
 
   // Track which entries are newly visited this click (for showing revealed facts)
   const [newVisitEntryId, setNewVisitEntryId] = useState<string | null>(null);
+
+  const [debugOpen, setDebugOpen] = useState(false);
 
   // Load the case and restore session
   useEffect(() => {
@@ -163,8 +166,20 @@ export function CasePage() {
           <Link to="/" className="text-sm text-stone-500 hover:text-stone-700">
             &larr; Back to cases
           </Link>
-          <h1 className="text-lg font-serif font-semibold">{gameCase.title}</h1>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setDebugOpen(true)}
+              className="text-sm text-stone-500 hover:text-stone-700 border border-stone-300 px-2 py-1 rounded"
+            >
+              Debug
+            </button>
+            <h1 className="text-lg font-serif font-semibold">{gameCase.title}</h1>
+          </div>
         </div>
+        {debugOpen && (
+          <DebugCasePanel gameCase={gameCase} onClose={() => setDebugOpen(false)} />
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 px-4 max-w-6xl w-full mx-auto">
           {/* Sidebar: Casebook */}
@@ -310,8 +325,20 @@ export function CasePage() {
           >
             &larr; Back to casebook
           </button>
-          <h1 className="text-lg font-serif font-semibold">{gameCase.title}</h1>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setDebugOpen(true)}
+              className="text-sm text-stone-500 hover:text-stone-700 border border-stone-300 px-2 py-1 rounded"
+            >
+              Debug
+            </button>
+            <h1 className="text-lg font-serif font-semibold">{gameCase.title}</h1>
+          </div>
         </div>
+        {debugOpen && (
+          <DebugCasePanel gameCase={gameCase} onClose={() => setDebugOpen(false)} />
+        )}
 
         <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">
           You visited {session?.visitedEntries.length ?? 0} entries and
