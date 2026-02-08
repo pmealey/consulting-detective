@@ -345,7 +345,9 @@ function FactRow({ fact }: { fact: Fact }) {
 }
 
 function FactsSection({ gameCase }: { gameCase: Case }) {
-  const facts = Object.values(gameCase.facts);
+  const facts = Object.values(gameCase.facts).sort((a, b) =>
+    a.factId.localeCompare(b.factId),
+  );
   return (
     <div className="space-y-2">
       {facts.length === 0 ? (
