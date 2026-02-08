@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
+import { basename } from './config/base-path.ts'
 import { Home } from './pages/Home.tsx'
 import { CasePage } from './pages/CasePage.tsx'
 
@@ -32,7 +33,7 @@ function AppLayout() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <AppLayout />
     </BrowserRouter>
   )

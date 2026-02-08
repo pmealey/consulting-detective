@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+import { basename } from '../config/base-path.ts'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? `${basename}/api`;
 
 interface ApiSuccessResponse<T> {
   success: true;
