@@ -1,5 +1,4 @@
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
-import { randomUUID } from 'crypto';
 import { docClient, CASES_TABLE } from '../shared/db';
 import type { CaseGenerationState } from '../shared/generation-state';
 import type { Case } from '../../types/case';
@@ -38,8 +37,6 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   }
 
   // Assemble final Case from drafts
-  const caseId = randomUUID();
-
   const finalEvents: Record<string, CausalEvent> = {};
   for (const [id, draft] of Object.entries(events)) {
     finalEvents[id] = {
@@ -117,7 +114,6 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   }));
 
   const finalCase: Case = {
-    caseId,
     caseDate: input.caseDate,
     title,
     setting: {

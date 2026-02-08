@@ -26,9 +26,6 @@ import type { Question } from './question';
 import type { CaseSetting, Difficulty } from './common';
 
 export interface Case {
-  /** Unique identifier */
-  caseId: string;
-
   /** The daily key, e.g. "2026-02-07" -- partition key in DDB */
   caseDate: string;
 

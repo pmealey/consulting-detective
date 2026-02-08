@@ -7,8 +7,8 @@
  */
 
 export interface PlayerSession {
-  /** The caseId being played */
-  caseId: string;
+  /** The caseDate being played, e.g. "2026-02-07" */
+  caseDate: string;
 
   /** Casebook entryIds in the order the player visited them */
   visitedEntries: string[];
