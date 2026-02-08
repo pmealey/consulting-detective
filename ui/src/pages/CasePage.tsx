@@ -131,29 +131,8 @@ export function CasePage() {
     [gameCase, session],
   );
 
-  // Loading / error states
-  if (error) {
-    return (
-      <div className="space-y-4">
-        <Link to="/" className="text-sm text-stone-500 hover:text-stone-700">
-          &larr; Back to cases
-        </Link>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-6">
-          <p className="text-red-800">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === 'loading' || !gameCase) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <p className="text-stone-500">Loading case...</p>
-      </div>
-    );
-  }
-
   // Visible casebook entries: no gate, or gate satisfied by discovered facts
+  // (Must be before any early returns to satisfy Rules of Hooks.)
   const visibleEntries = useMemo((): Record<string, CasebookEntry> => {
     if (!gameCase || !session) return {};
     const discovered = new Set(session.discoveredFacts);
@@ -179,6 +158,28 @@ export function CasePage() {
     }
     return result;
   }, [newVisitEntryId, gameCase?.casebook, visibleEntries]);
+
+  // Loading / error states
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <Link to="/" className="text-sm text-stone-500 hover:text-stone-700">
+          &larr; Back to cases
+        </Link>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-6">
+          <p className="text-red-800">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === 'loading' || !gameCase) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <p className="text-stone-500">Loading case...</p>
+      </div>
+    );
+  }
 
   // Investigation
   if (phase === 'investigation') {
