@@ -348,7 +348,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'template.$': '$.template',
         'events.$': '$.events',
         'eventValidationResult.$': '$.eventValidationResult',
-        'generateEventsRetries.$': sfn.JsonPath.mathAdd(
+        'generateEventsRetries': sfn.JsonPath.mathAdd(
           sfn.JsonPath.numberAt('$.generateEventsRetries'),
           1,
         ),
@@ -398,7 +398,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'generateEventsRetries.$': '$.generateEventsRetries',
         'characters.$': '$.characters',
         'characterValidationResult.$': '$.characterValidationResult',
-        'populateCharactersRetries.$': sfn.JsonPath.mathAdd(
+        'populateCharactersRetries': sfn.JsonPath.mathAdd(
           sfn.JsonPath.numberAt('$.populateCharactersRetries'),
           1,
         ),
@@ -439,7 +439,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'populateCharactersRetries.$': '$.populateCharactersRetries',
         'locations.$': '$.locations',
         'locationValidationResult.$': '$.locationValidationResult',
-        'buildLocationsRetries.$': sfn.JsonPath.mathAdd(
+        'buildLocationsRetries': sfn.JsonPath.mathAdd(
           sfn.JsonPath.numberAt('$.buildLocationsRetries'),
           1,
         ),
@@ -481,7 +481,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'facts.$': '$.facts',
         'introductionFactIds.$': '$.introductionFactIds',
         'discoveryGraphResult.$': '$.discoveryGraphResult',
-        'designCasebookRetries.$': sfn.JsonPath.mathAdd(
+        'designCasebookRetries': sfn.JsonPath.mathAdd(
           sfn.JsonPath.numberAt('$.designCasebookRetries'),
           1,
         ),
@@ -544,7 +544,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'title.$': '$.title',
         'questions.$': '$.questions',
         'questionValidationResult.$': '$.questionValidationResult',
-        'createQuestionsRetries.$': sfn.JsonPath.mathAdd(
+        'createQuestionsRetries': sfn.JsonPath.mathAdd(
           sfn.JsonPath.numberAt('$.createQuestionsRetries'),
           1,
         ),
