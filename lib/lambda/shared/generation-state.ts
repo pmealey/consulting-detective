@@ -40,7 +40,6 @@ export interface GenerateCaseInput {
   caseDate: string;
   difficulty?: 'easy' | 'medium' | 'hard';
   crimeType?: string;
-  seed?: number;
   modelConfig?: GenerationModelConfig;
 }
 
@@ -48,7 +47,6 @@ export const GenerateCaseInputSchema = z.object({
   caseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   difficulty: z.enum(['easy', 'medium', 'hard']).optional().default('medium'),
   crimeType: z.string().optional(),
-  seed: z.number().int().optional(),
   modelConfig: z
     .object({
       default: z.string(),
