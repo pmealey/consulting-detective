@@ -7,7 +7,7 @@
  *
  * Facts are the bridge between the narrative (events, characters) and the
  * game mechanic (casebook entries reveal facts, questions require facts).
- * A fact is a red herring if it appears in no question's requiredFacts --
+ * A fact is a red herring if it appears in no question's answerFactIds --
  * this is derivable, not stored.
  */
 
@@ -40,7 +40,6 @@ export type FactCategory =
  *
  * - 'knows': Character has accurate knowledge of this fact
  * - 'suspects': Character has an inkling but isn't certain
- * - 'believes_false': Character actively believes the opposite
  * - 'unknown': Character has no awareness of this fact (implicit default)
  */
-export type KnowledgeStatus = 'knows' | 'suspects' | 'believes_false' | 'unknown';
+export type KnowledgeStatus = 'knows' | 'suspects' | 'unknown';

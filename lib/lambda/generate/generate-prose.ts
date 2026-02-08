@@ -37,22 +37,23 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     .join('\n');
 
   const sceneGuidelines = `Scene-writing guidelines:
-- Each scene should be 100-300 words.
-- The player is the detective visiting this location/person. Write in second person where describing the scene, third person for dialogue.
+- Each scene should be 150-400 words.
+- The player is the detective visiting this location/person. Write in second person ("You arrive at...") where describing the scene, third person for dialogue.
 - Characters should speak in their distinctive tone (use their register, vocabulary, and quirks).
 - Characters reveal facts they KNOW about naturally through dialogue or observation.
 - Characters who SUSPECT something should hint at it indirectly.
 - Characters who HIDE something should deflect, change the subject, or give misleading information.
-- Characters who BELIEVE FALSE things should state them confidently as fact.
 - Physical evidence facts should be woven into environmental descriptions.
 - Never tell the player the significance of what they've found — let them connect the dots.
 - The prose should reward careful reading without being obtuse.
 - Maintain the atmospheric tone: ${template.atmosphere}.
-- Keep each character's current status in mind. Characters who cannot be met or interviewed (e.g. deceased, missing) must NOT appear as speaking or interactable.`;
+- Keep each character's current status in mind. Characters who cannot be met or interviewed (e.g. deceased, missing) must NOT appear as speaking or interactable.
+- Avoid common AI writing tells like em-dashes, asterisks, or excessive line breaks.
+- Locations that are accessible, visible, or audible from this one should be mentioned in the scene.`;
 
   // ---- Call 1: Introduction and Title ----
 
-  const introSystemPrompt = `You are a Victorian-era mystery writer crafting the opening scene for a detective game. The introduction is what the player reads before they begin investigating.
+  const introSystemPrompt = `You are a mystery writer crafting the opening scene for a detective game. The introduction is what the player reads before they begin investigating.
 
 First, briefly plan the narrative arc of the introduction. Then provide the JSON.
 
@@ -63,11 +64,11 @@ Your response must end with valid JSON matching this schema:
 }
 
 Introduction guidelines:
-- Set the scene: where the player is summoned, what the initial situation appears to be.
+- Set the scene: where the player is summoned, who called them in, what the initial situation appears to be.
 - Establish the atmosphere and era.
 - Give the player just enough to start investigating, but don't give away the solution.
-- Write in second person ("You arrive at...").
-- 2-4 paragraphs, 150-300 words.`;
+
+${sceneGuidelines}`;
 
   const introUserPrompt = `Here is the case context:
 
@@ -103,7 +104,7 @@ Write the introduction. Plan your approach first, then provide the JSON.`;
     buildEntryContext(entry, locations, characters, facts),
   );
 
-  const scenesSystemPrompt = `You are a Victorian-era mystery writer crafting prose scenes for a detective game. Each scene is what the player reads when they visit a casebook entry.
+  const scenesSystemPrompt = `You are a mystery writer crafting prose scenes for a detective game. Each scene is what the player reads when they visit a casebook entry.
 
 You are writing ALL scenes for this case in a single pass. Ensure consistency across scenes: if two characters describe the same event, their accounts should align (or deliberately conflict if one is lying). Recurring details (weather, time of day, physical descriptions) must be consistent.
 
@@ -116,6 +117,9 @@ ${sceneGuidelines}`;
 Title: ${intro.title}
 Setting: ${template.era}, ${template.date}
 Crime Type: ${template.crimeType}
+
+Introduction:
+${intro.introduction}
 
 The story (chronological events):
 ${storyTimeline}
@@ -165,8 +169,10 @@ function buildEntryContext(
     .filter(Boolean);
 
   return `Entry "${entry.entryId}" (${entry.label}, ${entry.address}):
-  Location: ${location?.name ?? entry.locationId} — ${location?.description ?? ''}
-  Type: ${entry.type}
+  Location: ${entry.locationId} — ${location.name} — ${location?.description ?? ''}
+  Accessible from: ${location?.accessibleFrom.map((id) => `${id} — ${locations[id].name}`).join(', ') ?? ''}
+  Visible from: ${location?.visibleFrom.map((id) => `${id} — ${locations[id].name}`).join(', ') ?? ''}
+  Audible from: ${location?.audibleFrom.map((id) => `${id} — ${locations[id].name}`).join(', ') ?? ''}
   Characters present: ${presentChars.map((c) => `${c.name} (${c.mysteryRole}, ${c.societalRole}, tone: ${c.tone.register}, vocab: [${c.tone.vocabulary.join(', ')}]${c.tone.quirk ? `, quirk: ${c.tone.quirk}` : ''})`).join('; ') || 'none'}
   Facts to reveal: ${revealedFacts.map((f) => `${f.factId}: "${f.description}"`).join('; ')}
   Character knowledge at this entry:

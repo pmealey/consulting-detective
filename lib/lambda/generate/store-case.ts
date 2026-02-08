@@ -6,7 +6,7 @@ import type { CausalEvent, InvolvementType, EventNecessity } from '../../types/e
 import type { Character } from '../../types/character';
 import type { KnowledgeStatus } from '../../types/fact';
 import type { Location, LocationType } from '../../types/location';
-import type { CasebookEntry, EntryType } from '../../types/casebook';
+import type { CasebookEntry } from '../../types/casebook';
 import type { Fact, FactCategory } from '../../types/fact';
 import type { Question } from '../../types/question';
 import type { Difficulty } from '../../types/common';
@@ -76,8 +76,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       name: draft.name,
       type: draft.type as LocationType,
       description: draft.description,
-      parent: draft.parent,
-      adjacentTo: draft.adjacentTo,
+      accessibleFrom: draft.accessibleFrom,
       visibleFrom: draft.visibleFrom,
       audibleFrom: draft.audibleFrom,
     };
@@ -99,7 +98,6 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       label: draft.label,
       address: draft.address,
       locationId: draft.locationId,
-      type: draft.type as EntryType,
       scene: prose[id] ?? '',
       characters: draft.characters,
       revealsFactIds: draft.revealsFactIds,

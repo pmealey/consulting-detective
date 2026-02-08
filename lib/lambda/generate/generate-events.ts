@@ -36,23 +36,30 @@ Each event must match this schema:
   "agent": string,                // roleId of who performed this action (from template characterRoles)
   "location": string,             // locationId placeholder (e.g. "loc_pub", "loc_victim_home")
   "involvement": Record<string, string>,  // roleId -> involvement type
-  "necessity": "required" | "contingent",
+  "necessity": "required" | undefined,
   "causes": string[],             // eventIds this event causes/enables
-  "reveals": string[]             // factId placeholders this event would reveal to witnesses (e.g. "fact_01")
+  "reveals": string[]             // factId placeholders this event would reveal to witnesses (e.g. "fact_suspect_left_handed", "fact_cloth_scrap")
 }
 
-Involvement types: "agent", "participant", "witness_visual", "witness_auditory", "informed_after", "discovered_evidence"
+Involvement types: "agent", "participant", "witness_direct", "witness_visual", "witness_auditory", "informed_after", "discovered_evidence"
+- "witness_direct" is a generic witness who was present and observed the event.
+- "witness_visual" is a witness who saw the event happen from another location.
+- "witness_auditory" is a witness who heard the event happen from another location.
+- "informed_after" is a witness who learned about the event secondhand, after the fact.
+- "discovered_evidence" is a witness who found physical evidence of the event later.
 
 Guidelines:
 - Create one event per template slot, using the slotId as the basis for eventId.
 - The agent in each event must reference a roleId from the template's characterRoles.
 - Every event must have at least the agent in its involvement map (with type "agent").
 - Timestamps should be sequential integers starting at 0.
-- Each event should reveal 1-3 facts (as placeholder factIds like "fact_01").
+- Each event should reveal 1-3 facts (as placeholder factIds like "fact_suspect_left_handed", "fact_cloth_scrap").
 - The causes array should reference other eventIds that this event leads to (forward edges in the DAG).
 - Ensure the causal DAG is acyclic and connected.
-- Location references should be descriptive placeholders (e.g. "loc_crime_scene", "loc_pub") — they'll be fully defined in a later step.
-- Remember: the "reveals" array means "a witness to this event would learn these facts" — NOT "a detective investigating would find these clues".`;
+- Location references should be descriptive placeholders (e.g. "loc_pub", "loc_victim_home") — they'll be fully defined in a later step.
+- Remember: the "reveals" array means "a witness to this event would learn these facts" — NOT "a detective investigating would find these clues".
+- INVOLVEMENT DENSITY: Most events should involve 3+ characters (the agent plus at least 2 others as participants, witnesses, or bystanders). This is critical — multiple sources of information per fact make the mystery investigable from different angles.
+- Only 1-2 key events (e.g. a secret act of sabotage, a solitary theft) should have just the agent or agent + one other. If an event happens in a public or semi-public place, think about who else was nearby.`;
 
   const userPrompt = `Here is the case template to work from:
 
@@ -60,10 +67,9 @@ Crime Type: ${template.crimeType}
 Title: ${template.title}
 Setting: ${template.era}, ${template.date}
 Atmosphere: ${template.atmosphere}
-Difficulty: ${template.difficulty}
 
 Event Slots:
-${template.eventSlots.map((s) => `  - ${s.slotId}: ${s.description} (${s.necessity}, caused by: [${s.causedBy.join(', ')}])`).join('\n')}
+${template.eventSlots.map((s) => `  - ${s.slotId}: ${s.description} (${s.necessity ? 'required' : 'optional'}, caused by: [${s.causedBy.join(', ')}])`).join('\n')}
 
 Character Roles:
 ${template.characterRoles.map((r) => `  - ${r.roleId}: ${r.role} — ${r.description}`).join('\n')}

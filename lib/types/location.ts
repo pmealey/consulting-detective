@@ -24,14 +24,8 @@ export interface Location {
   /** Atmospheric/physical description */
   description: string;
 
-  /**
-   * Parent locationId for containment hierarchy.
-   * e.g. a room's parent is the building it's in.
-   */
-  parent?: string;
-
   /** locationIds of places adjacent to this one */
-  adjacentTo: string[];
+  accessibleFrom: string[];
 
   /** locationIds from which events at this location can be seen */
   visibleFrom: string[];
@@ -40,4 +34,4 @@ export interface Location {
   audibleFrom: string[];
 }
 
-export type LocationType = 'building' | 'room' | 'outdoor' | 'street' | 'district';
+export type LocationType = string;

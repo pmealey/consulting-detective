@@ -15,7 +15,7 @@ A log of specific design choices and their rationale. Each entry records the dec
 - Leak the answer into the data structure
 - Prevent cases where the "culprit" is ambiguous or where the questions aren't about guilt at all (e.g. "What was hidden in the safe?")
 
-Instead, guilt is emergent: a Question asks "Who murdered Mr. Pemberton?", its `requiredFacts` point to the evidence, and its `answer` names the character. The data model supports any narrative conclusion the questions want to probe.
+Instead, guilt is emergent: a Question asks "Who is responsible for the victim's death?", its `answerFactIds` point to the person fact for the culprit, and the player selects it from their discovered facts filtered by `answerCategory: "person"`. The data model supports any narrative conclusion the questions want to probe.
 
 ---
 
@@ -36,13 +36,13 @@ Instead, guilt is emergent: a Question asks "Who murdered Mr. Pemberton?", its `
 **Alternatives considered**: A single `Location` type that serves both as world scaffolding and as the visitable address.
 
 **Rationale**: These are different concerns:
-- **Locations** are spatial/physical: they have perception edges (visibleFrom, audibleFrom), containment hierarchy (parent), and adjacency. They exist to constrain what characters could perceive during events. The player never sees them directly.
-- **CasebookEntries** are the game mechanic: they have a label, address, prose scene, and list of revealed facts. They are what the player interacts with.
+- **Locations** are spatial/physical: they have perception edges (visibleFrom, audibleFrom) and accessibility edges (accessibleFrom). They exist to constrain what characters could perceive during events. The player never sees them directly.
+- **CasebookEntries** are the game mechanic: they have a label, address, prose scene, and list of revealed facts. They are what the player interacts with. All entries are gated behind fact discovery via `requiresAnyFact` (OR-logic).
 
 The split enables:
 - **Multiple entries per location**: Visiting the pub in the morning (the barkeeper is alone) vs. the evening (the regulars are there) are different casebook entries at the same location.
-- **Person-focused entries**: "Consult Inspector Lestrade" is a casebook entry that happens to take place at Scotland Yard, but the entry is about the person, not the place.
-- **Document and event entries**: Examining a letter or attending an inquest are casebook entries that reference a location but aren't really "about" visiting that place.
+- **Person-focused entries**: "Inspector Lestrade at Scotland Yard" is a casebook entry that happens to take place at Scotland Yard, but the entry is about the person, not the place.
+- **Flexible gating**: Person-type identity facts gate person entries, place-type identity facts gate location entries, allowing progressive discovery through the bipartite facts ↔ entries graph.
 
 ---
 
@@ -52,14 +52,14 @@ The split enables:
 
 **Alternatives considered**: Explicitly marking red herring entries during generation.
 
-**Rationale**: "Red herring" is a derived property, not an intrinsic one. A casebook entry is a red herring if the intersection of its `revealsFactIds` with the union of all `question.requiredFacts` is empty. This can be computed at validation time:
+**Rationale**: "Red herring" is a derived property, not an intrinsic one. A casebook entry is a red herring if the intersection of its `revealsFactIds` with the union of all `question.answerFactIds` is empty. This can be computed at validation time:
 
 ```typescript
-const criticalFacts = new Set(
-  case.questions.flatMap(q => q.requiredFacts)
+const answerFacts = new Set(
+  case.questions.flatMap(q => q.answerFactIds)
 );
 const isRedHerring = (entry: CasebookEntry) =>
-  entry.revealsFactIds.every(fid => !criticalFacts.has(fid));
+  entry.revealsFactIds.every(fid => !answerFacts.has(fid));
 ```
 
 Storing it would create a maintenance burden: if questions change, the flag could become stale. Computing it on demand is trivial and always correct.
@@ -77,7 +77,7 @@ Storing it would create a maintenance burden: if questions change, the flag coul
 Arrays are kept where they're appropriate:
 - `questions`: Order matters (presented sequentially to the player).
 - `optimalPath`: Order matters (it's a sequence of visits).
-- Reference ID lists (`causes`, `reveals`, `revealsFactIds`, `adjacentTo`, etc.): These are sets of IDs, not keyed structures. Arrays are fine; they're small and iterated, not looked up by key.
+- Reference ID lists (`causes`, `reveals`, `revealsFactIds`, `accessibleFrom`, etc.): These are sets of IDs, not keyed structures. Arrays are fine; they're small and iterated, not looked up by key.
 
 ---
 
@@ -95,6 +95,7 @@ Arrays are kept where they're appropriate:
 The typed `InvolvementType` is richer than flat participant/witness arrays because it captures *how* a character is connected, which directly shapes scene generation:
 - `agent`: performed the action -- can describe it from their own perspective
 - `participant`: directly involved -- knows firsthand details
+- `witness_direct`: was present and observed the event (generic witness)
 - `witness_visual`: saw it happen from another location -- can describe what they saw but may have misinterpreted
 - `witness_auditory`: heard it from another location -- can report sounds but not sights
 - `informed_after`: learned secondhand -- has filtered/distorted information

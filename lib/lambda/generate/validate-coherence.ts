@@ -72,18 +72,9 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
 
   // ---- Location Validation ----
   for (const location of Object.values(locations)) {
-    if (location.parent && !locationIds.has(location.parent)) {
-      errors.push(`Location ${location.locationId}: parent "${location.parent}" is not a valid locationId`);
-    }
-    for (const adjId of location.adjacentTo) {
+    for (const adjId of location.accessibleFrom) {
       if (!locationIds.has(adjId)) {
-        errors.push(`Location ${location.locationId}: adjacentTo references unknown location "${adjId}"`);
-      }
-    }
-    // Check symmetric adjacency
-    for (const adjId of location.adjacentTo) {
-      if (locationIds.has(adjId) && !locations[adjId].adjacentTo.includes(location.locationId)) {
-        warnings.push(`Location ${location.locationId}: adjacentTo "${adjId}" is not symmetric`);
+        errors.push(`Location ${location.locationId}: accessibleFrom references unknown location "${adjId}"`);
       }
     }
   }

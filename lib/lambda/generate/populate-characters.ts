@@ -33,21 +33,21 @@ First, briefly reason through each character: their personality, what makes them
 Your response must end with valid JSON matching this schema:
 {
   "characters": Record<string, Character>,  // keyed by characterId
-  "roleMapping": Record<string, string>     // roleId -> characterId (e.g. "role_victim" -> "char_ashford")
+  "roleMapping": Record<string, string>     // roleId -> characterId (e.g. "role_victim" -> "char_albert_ashford")
 }
 
 Each Character must match:
 {
-  "characterId": string,           // e.g. "char_pemberton"
+  "characterId": string,           // e.g. "char_arthur_pemberton"
   "name": string,                  // full name, e.g. "Arthur Pemberton"
   "mysteryRole": string,           // narrative/mystery role (e.g. victim/suspect — used in prompts only)
   "societalRole": string,          // occupation/station ONLY — e.g. "Landlady", "Business partner". This is shown to players. NEVER use Victim, Witness, Suspect here.
   "description": string,           // physical/personality sketch (2-3 sentences)
   "wants": string[],               // motivations (1-3 items)
   "hides": string[],               // factIds or free-text secrets they conceal
-  "knowledgeState": Record<string, string>,  // factId -> "knows" | "suspects" | "believes_false"
+  "knowledgeState": Record<string, string>,  // factId -> "knows" | "suspects"
   "tone": {
-    "register": string,            // e.g. "formal", "nervous", "brusque"
+    "register": string,            // e.g. "formal", "nervous", "brusque", etc.
     "vocabulary": string[],        // 3-5 characteristic words/phrases
     "quirk": string | undefined    // optional speech quirk
   },
@@ -57,14 +57,15 @@ Each Character must match:
 CRITICAL: The "roleMapping" must map EVERY roleId from the template to the characterId you create for it. This mapping is used to replace role placeholders in the event chain with real character IDs.
 
 Guidelines:
-- Create one character per template role. The characterId should be name-based (e.g. role_suspect_1 -> char_blackwood).
-- Each character's knowledgeState should reference the fact placeholders from the event chain (e.g. "fact_01": "knows").
-- Knowledge must be consistent with event involvement: a character can only "know" a fact if they were involved in an event that reveals it (agent, participant, witness_visual, witness_auditory) or were informed_after.
+- Create one character per template role. The characterId should be name-based (e.g. role_suspect_1 -> char_charles_blackwood).
+- Each character's knowledgeState should reference the fact placeholders from the event chain (e.g. "fact_suspect_left_handed": "knows").
+- Knowledge must be consistent with event involvement: a character can only "know" a fact if they were involved in an event that reveals it (agent, participant, witness, witness_visual, witness_auditory) or were informed_after.
 - Characters who hide something should have that reflected in both their "hides" array and their motivations.
 - Each character should have a distinctive tone that reflects their personality and social station.
 - Names should fit the era: ${template.era}.
+- Names should what the character will be known by during the investigation, not necessarily what their real name is.
 - Avoid stereotypes. Make characters feel like real people with contradictions.
-- Set currentStatus only when it affects whether or how the character can be met during the investigation (e.g. "deceased", "missing", "imprisoned", "traveling", "ill"). Omit for characters with no such constraint.
+- Set currentStatus only when it affects whether or how the character can be met during the investigation. Omit for characters with no such constraint.
 - societalRole must be their job or station in society (Landlady, Servant, Business partner, Inspector). Never put mystery labels (Victim, Witness, Suspect) in societalRole — those go in "mysteryRole" only.`;
 
   const userPrompt = `Here is the case context:

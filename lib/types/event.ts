@@ -46,6 +46,7 @@ export interface CausalEvent {
    * During generation, involvement is determined by:
    * - 'agent': the character who performed the event
    * - 'participant': directly involved but not the primary actor
+   * - 'witness_direct': was present and observed the event (generic)
    * - 'witness_visual': was at a location in the event location's visibleFrom list
    * - 'witness_auditory': was at a location in the event location's audibleFrom list
    * - 'informed_after': learned about the event secondhand, after the fact
@@ -66,9 +67,15 @@ export interface CausalEvent {
 export type InvolvementType =
   | 'agent'
   | 'participant'
+  | 'witness_direct'
   | 'witness_visual'
   | 'witness_auditory'
   | 'informed_after'
   | 'discovered_evidence';
 
-export type EventNecessity = 'required' | 'contingent';
+/**
+ * Whether this event is required for the plot spine or optional.
+ * 'required' marks narrative-essential events; undefined means the event
+ * adds texture but can be omitted without breaking the plot.
+ */
+export type EventNecessity = 'required' | undefined;

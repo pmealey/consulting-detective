@@ -14,7 +14,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   const { input } = state;
   const difficulty = input.difficulty ?? 'medium';
 
-  const systemPrompt = `You are a mystery case designer for a Sherlock Holmes-style detective game set in various historical eras. Your job is to create a case template — the structural blueprint for a mystery.
+  const systemPrompt = `You are a mystery case designer for a detective game set in various eras and settings. Your job is to create a case template — the structural blueprint for a mystery.
 
 CRITICAL DISTINCTION — Story Events vs. Investigation:
 Event slots describe THE STORY — things that actually happened BEFORE or DURING the crime, from the perspective of the people involved. They are NOT the investigation that follows. The player's investigation is a separate game mechanic (the casebook) built later.
@@ -39,14 +39,14 @@ Your response must end with valid JSON matching this schema:
 {
   "crimeType": string,       // e.g. "murder", "theft", "blackmail", "forgery", "smuggling"
   "title": string,           // evocative case title, e.g. "The Affair of the Tarnished Locket"
-  "era": string,             // e.g. "Victorian London, 1893"
-  "date": string,            // in-world date, e.g. "14 March 1893"
+  "era": string,             // e.g. "Victorian London, 1893", "New York City, 1921", "Aldrin Orbital Station, 2072"
+  "date": string,            // in-world date, e.g. "14 March 1893", "November 10, 1921", "December 25, 2072"
   "atmosphere": string,      // atmospheric description, e.g. "A damp, fog-choked evening"
   "eventSlots": [            // 5-10 events forming the causal spine
     {
       "slotId": string,      // e.g. "E01_inciting_incident"
       "description": string, // what HAPPENED (not what was discovered)
-      "necessity": "required" | "contingent",
+      "necessity": "required" | undefined,
       "causedBy": string[]   // slotIds of events that cause this one (empty for root events)
     }
   ],
@@ -61,12 +61,13 @@ Your response must end with valid JSON matching this schema:
 }
 
 Guidelines:
-- For "easy" difficulty: 5-6 events, 3-4 characters, straightforward motive
-- For "medium" difficulty: 6-8 events, 5-6 characters, one red herring thread
-- For "hard" difficulty: 8-10 events, 6-8 characters, multiple misleading threads
+- For "easy" difficulty: 5-6 events, 5-6 characters, straightforward motive
+- For "medium" difficulty: 6-8 events, 6-8 characters, one red herring thread
+- For "hard" difficulty: 8-10 events, 8-12 characters, multiple misleading threads
 - Event slots form a DAG via causedBy. At least one root event (empty causedBy) must exist.
 - At least 3 events must be "required" (form the narrative spine).
-- Include roles for: a victim (or wronged party), at least one genuine suspect, and at least one red herring character.
+- Include roles for: at least one victim (or wronged party), at least one genuine suspect, and at least one red herring character.
+- Other roles can be things like witnesses, unreliable witnesses, bystanders, victim's husband or suspect's friend, victim's employee, etc.
 - The crime type should be specific, not generic. "Theft of shipping manifests to cover embezzlement" is better than "theft".
 - Every event must be something that HAPPENED in the world, not something the police/detective discovered or concluded.`;
 

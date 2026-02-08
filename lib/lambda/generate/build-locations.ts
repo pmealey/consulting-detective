@@ -22,31 +22,30 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
 
   const systemPrompt = `You are a location designer for a mystery game. Given a case template, event chain, and characters, you create a coherent spatial world.
 
-First, briefly reason through the spatial layout: how buildings relate to each other, what sight lines and sound carries exist, and how this affects who could witness what. Then provide the JSON.
+First, briefly reason through the spatial layout: how buildings relate to each other, what sight lines and sound carries exist, and how this affects who witnessed what. Then provide the JSON.
 
 Your response must end with valid JSON: a Record<string, Location> keyed by locationId.
 
 Each location must match this schema:
 {
-  "locationId": string,        // e.g. "loc_pemberton_study"
-  "name": string,              // e.g. "The Pemberton Study"
-  "type": "building" | "room" | "outdoor" | "street" | "district",
-  "description": string,       // atmospheric 2-3 sentence description
-  "parent": string | undefined,  // locationId of containing location (room -> building)
-  "adjacentTo": string[],      // locationIds of adjacent places
-  "visibleFrom": string[],     // locationIds from which this place can be seen
-  "audibleFrom": string[]      // locationIds from which events here can be heard
+  "locationId": string,          // e.g. "loc_pemberton_study"
+  "name": string,                // e.g. "The Pemberton Study"
+  "type": string                 // e.g. "building", "room", "street", "campsite", etc.
+  "description": string,         // atmospheric 2-3 sentence description
+  "accessibleFrom": string[],    // locationIds from which this place can be accessed
+  "visibleFrom": string[],       // locationIds from which this place can be seen
+  "audibleFrom": string[]        // locationIds from which events here can be heard
 }
 
 Guidelines:
-- Create a location for each placeholder used in the events, plus additional locations for atmosphere and red herring entries.
-- Use a containment hierarchy: rooms are inside buildings, buildings are on streets, streets are in districts.
-- Perception edges (visibleFrom, audibleFrom) are CRITICAL for the mystery — they determine who could have witnessed what.
+- Create a location for each placeholder used in the events.
+- Create additional locations for where characters can be found during the investigation. Some characters may be present at the same location.
+- When a character has audibly or visually witnessed an event, create additional locations for the locations they were at when the event happened.
+- Perception and accessibility edges (accessibleFrom, visibleFrom, audibleFrom) are CRITICAL for the mystery — they determine who could have witnessed what.
+- A location's accessibleFrom should include all relevant locations that can be physically accessed from this location.
 - A location's audibleFrom should generally include adjacent rooms in the same building.
 - A location's visibleFrom should include places with direct sight lines (across a street, through a window).
-- Create 8-15 total locations for a rich world to explore.
-- Location names and descriptions should evoke the era: ${template.era}.
-- Adjacency should be symmetric: if A is adjacent to B, B should be adjacent to A.`;
+- Location names and descriptions should evoke the era: ${template.era}.`;
 
   const userPrompt = `Here is the case context:
 
@@ -62,6 +61,9 @@ ${Object.values(events).sort((a, b) => a.timestamp - b.timestamp).map((e) => `  
 
 Characters:
 ${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.mysteryRole}, ${c.societalRole}`).join('\n')}
+
+Event Involvement Details:
+${Object.values(events).map((e) => `  ${e.eventId}: ${JSON.stringify(e.involvement)}`).join('\n')}
 
 Create the full location graph. Every event location placeholder must map to a concrete location. Add additional locations for atmosphere. Think through the spatial relationships first, then provide the JSON.`;
 

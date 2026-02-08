@@ -45,20 +45,34 @@ Each question must match this schema:
   "difficulty": "easy" | "medium" | "hard"
 }
 
-Guidelines:
+## ANSWER CATEGORY RULES
+
+The player answers each question by selecting a fact from their discovered facts, filtered to only show facts matching the question's \`answerCategory\`. This means the category determines what list the player picks from. Choose the category that makes the answer a meaningful selection from a non-trivial list.
+
+**Category-to-question-type mapping:**
+
+| Question asks about... | answerCategory | answerFactIds should be... | Points |
+|---|---|---|---|
+| Identity of a person (culprit, accomplice, key witness) | \`person\` | Person identity fact(s) for that character | 15-20 |
+| A key location (crime scene, hiding place, meeting point) | \`place\` | Place identity fact(s) for that location | 5-10 |
+| Why someone did something (motive, grudge, desire) | \`motive\` | The specific motive fact(s) | 10-15 |
+| How the crime was committed (method, weapon, technique) | \`means\` | The specific means fact(s) | 10-15 |
+| When/whether someone had the chance to act | \`opportunity\` | The specific opportunity fact(s) | 10-15 |
+| A connection between people or entities | \`relationship\` | The specific relationship fact(s) | 5-10 |
+| When something happened or sequence of events | \`timeline\` | The specific timeline fact(s) | 5-10 |
+| Physical evidence (object, trace, document) | \`physical_evidence\` | The specific evidence fact(s) | 5-10 |
+
+CRITICAL: "Who" questions MUST use \`answerCategory: "person"\` with person identity facts as answers — NOT motive, relationship, or other facts that happen to name the person. The player is selecting from a list of people, not a list of motives. Similarly, "Where" questions MUST use \`answerCategory: "place"\` with place identity facts.
+
+## OTHER GUIDELINES
+
 - Create 4-8 questions depending on difficulty level.
 - Questions should progress from easier to harder.
-- Key question types:
-  * "Who" questions (identity of culprit, accomplice, witness) — usually worth 15-20 points
-  * "Why" questions (motive, reason) — usually worth 10-15 points
-  * "How" questions (method, means) — usually worth 10-15 points
-  * "What" questions (what happened, connection, evidence) — usually worth 5-10 points
-  * "Where" questions (key location) — usually worth 5-10 points
 - Every factId in answerFactIds MUST reference an actual factId from the provided facts list.
 - Every factId in answerFactIds MUST share the same category, which MUST match answerCategory.
 - If multiple facts could reasonably answer the question, include all of them in answerFactIds. The first entry should be the single best answer; additional entries are acceptable alternatives.
 - CRITICAL: question text must be VAGUE and NON-SPOILING. Do NOT name specific characters, locations, or details that would give away answers to other questions. For example, instead of "Who killed Lord Ashworth at the docks?" write "Who is responsible for the victim's death?" — the player already knows the case context.
-- Try to cover a variety of different facts across questions.
+- Try to cover a variety of different facts and categories across questions. Don't make every question a "Who" question.
 - Point values: easy=5-10, medium=10-15, hard=15-20.`;
 
   const userPrompt = `Here is the case context:

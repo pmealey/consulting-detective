@@ -321,12 +321,9 @@ function LocationRow({ location }: { location: Location }) {
         <div className="p-3 pt-0 space-y-2 text-sm border-t border-stone-200">
           <KeyValue label="type" value={location.type} mono />
           <KeyValue label="description" value={location.description} />
-          {location.parent != null && (
-            <KeyValue label="parent" value={location.parent} mono />
-          )}
           <KeyValue
-            label="adjacentTo"
-            value={location.adjacentTo.length ? location.adjacentTo.join(', ') : '—'}
+            label="accessibleFrom"
+            value={location.accessibleFrom.length ? location.accessibleFrom.join(', ') : '—'}
             mono
           />
           <KeyValue
@@ -381,7 +378,6 @@ function CasebookEntryRow({ entry }: { entry: CasebookEntry }) {
         <div className="p-3 pt-0 space-y-2 text-sm border-t border-stone-200">
           <KeyValue label="address" value={entry.address} />
           <KeyValue label="locationId" value={entry.locationId} mono />
-          <KeyValue label="type" value={entry.type} mono />
           {isGated && (
             <KeyValue
               label="requiresAnyFact"

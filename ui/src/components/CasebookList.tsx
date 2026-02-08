@@ -1,19 +1,5 @@
 import type { CasebookEntry } from '@shared/index';
 
-const typeLabels: Record<string, string> = {
-  location: 'Location',
-  person: 'Person',
-  document: 'Document',
-  event: 'Event',
-};
-
-const typeColors: Record<string, string> = {
-  location: 'bg-blue-100 text-blue-800',
-  person: 'bg-amber-100 text-amber-800',
-  document: 'bg-emerald-100 text-emerald-800',
-  event: 'bg-purple-100 text-purple-800',
-};
-
 interface CasebookListProps {
   /** Filtered entries (only visible given current discovered facts). */
   entries: Record<string, CasebookEntry>;
@@ -101,16 +87,6 @@ export function CasebookList({
                       {entry.address}
                     </div>
                   </div>
-                  <span
-                    className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
-                      selected
-                        ? 'bg-stone-700 text-stone-300'
-                        : typeColors[entry.type] ??
-                          'bg-stone-100 text-stone-600'
-                    }`}
-                  >
-                    {typeLabels[entry.type] ?? entry.type}
-                  </span>
                 </div>
               </button>
             </li>

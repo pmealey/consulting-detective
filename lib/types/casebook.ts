@@ -29,9 +29,6 @@ export interface CasebookEntry {
   /** locationId where this entry takes place */
   locationId: string;
 
-  /** What kind of casebook entry this is */
-  type: EntryType;
-
   /** The prose fragment the player reads when visiting this entry */
   scene: string;
 
@@ -48,5 +45,3 @@ export interface CasebookEntry {
    */
   requiresAnyFact: string[];
 }
-
-export type EntryType = 'location' | 'person' | 'document' | 'event';

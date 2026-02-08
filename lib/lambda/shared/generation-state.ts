@@ -128,7 +128,7 @@ export interface CaseTemplate {
 export interface EventSlot {
   slotId: string;
   description: string;
-  necessity: 'required' | 'contingent';
+  necessity?: 'required' | undefined;
   causedBy: string[];
 }
 
@@ -145,7 +145,7 @@ export interface EventDraft {
   agent: string;
   location: string;
   involvement: Record<string, string>;
-  necessity: 'required' | 'contingent';
+  necessity?: 'required' | undefined;
   causes: string[];
   reveals: string[];
 }
@@ -173,8 +173,7 @@ export interface LocationDraft {
   name: string;
   type: string;
   description: string;
-  parent?: string;
-  adjacentTo: string[];
+  accessibleFrom: string[];
   visibleFrom: string[];
   audibleFrom: string[];
 }
@@ -190,7 +189,6 @@ export interface CasebookEntryDraft {
   label: string;
   address: string;
   locationId: string;
-  type: string;
   characters: string[];
   revealsFactIds: string[];
   requiresAnyFact: string[];
@@ -237,7 +235,7 @@ export const CaseTemplateSchema = z.object({
       z.object({
         slotId: z.string().min(1),
         description: z.string().min(1),
-        necessity: z.enum(['required', 'contingent']),
+        necessity: z.literal('required').optional(),
         causedBy: z.array(z.string()),
       }),
     )
@@ -263,7 +261,7 @@ export const EventsSchema = z.record(
     agent: z.string().min(1),
     location: z.string().min(1),
     involvement: z.record(z.string(), z.string()),
-    necessity: z.enum(['required', 'contingent']),
+    necessity: z.literal('required').optional(),
     causes: z.array(z.string()),
     reveals: z.array(z.string()),
   }),
@@ -299,10 +297,9 @@ export const LocationsSchema = z.record(
   z.object({
     locationId: z.string().min(1),
     name: z.string().min(1),
-    type: z.enum(['building', 'room', 'outdoor', 'street', 'district']),
+    type: z.string().min(1),
     description: z.string().min(1),
-    parent: z.string().optional(),
-    adjacentTo: z.array(z.string()),
+    accessibleFrom: z.array(z.string()),
     visibleFrom: z.array(z.string()),
     audibleFrom: z.array(z.string()),
   }),
@@ -322,7 +319,7 @@ export const FactsSchema = z.record(
 );
 
 /** Schema for step 5 output: facts + introductionFactIds */
-export const DistributeFactsResultSchema = z.object({
+export const GenerateFactsResultSchema = z.object({
   facts: FactsSchema,
   introductionFactIds: z.array(z.string().min(1)).min(2).max(4),
 });
@@ -334,7 +331,6 @@ export const CasebookSchema = z.record(
     label: z.string().min(1),
     address: z.string().min(1),
     locationId: z.string().min(1),
-    type: z.enum(['location', 'person', 'document', 'event']),
     characters: z.array(z.string()),
     revealsFactIds: z.array(z.string()),
     requiresAnyFact: z.array(z.string().min(1)).min(1),

@@ -36,9 +36,9 @@ The moonstone-packet defines an `EVENTS` dict (22 events with description, date,
 
 The moonstone-packet defines a `FACTS` dict (12 key narrative facts) and a `KNOWLEDGE_STATES` dict mapping each character to each fact with a tuple of (status, since_when, belief). This creates a bipartite graph: Characters <-> Facts, with edges typed as `knows`, `suspects`, `believes_false`, or `unknown`.
 
-**Inverted as**: `Fact` interface (factId, description, category, critical) and `Character.knowledgeState: Record<string, KnowledgeStatus>`.
+**Inverted as**: `Fact` interface (factId, description, category) and `Character.knowledgeState: Record<string, KnowledgeStatus>`.
 
-**What changed**: The extraction model tracks *when* knowledge changes (`since_when`) because it's analyzing a narrative that unfolds over time. The generation model drops temporal knowledge tracking -- in a compressed daily case, characters have a single knowledge state at "investigation time." The bipartite structure is preserved: facts exist independently, characters reference them by ID in their knowledge state map.
+**What changed**: The extraction model tracks *when* knowledge changes (`since_when`) because it's analyzing a narrative that unfolds over time. The generation model drops temporal knowledge tracking -- in a compressed daily case, characters have a single knowledge state at "investigation time." The `believes_false` status was dropped since characters who hide information are better represented via their `hides` array and deflection behavior in prose. The bipartite structure is preserved: facts exist independently, characters reference them by ID in their knowledge state map.
 
 ### Location Graph -> `Location`
 
@@ -46,9 +46,9 @@ The moonstone-packet defines a `FACTS` dict (12 key narrative facts) and a `KNOW
 
 The moonstone-packet defines `LOCATIONS` (with description, type, parent, floor), `SPATIAL_EDGES` (CONTAINS, ADJACENT_TO, VISIBLE_FROM, AUDIBLE_FROM), and `EVENT_LOCATIONS` mapping events to where they occurred. It also computes a perception matrix: for each location, which other locations can see/hear it.
 
-**Inverted as**: `Location` interface with `locationId`, `name`, `type`, `description`, `parent?`, `adjacentTo[]`, `visibleFrom[]`, `audibleFrom[]`.
+**Inverted as**: `Location` interface with `locationId`, `name`, `type`, `description`, `parent?`, `accessibleFrom[]`, `visibleFrom[]`, `audibleFrom[]`.
 
-**What changed**: The extraction model uses separate edge lists (SPATIAL_EDGES) and a computed perception matrix. The generation model embeds the spatial relationships directly on each location as adjacency lists. The perception edges (`visibleFrom`, `audibleFrom`) are the key innovation from the moonstone-packet: they constrain who could have witnessed what, which drives the `involvement` computation on events during generation.
+**What changed**: The extraction model uses separate edge lists (SPATIAL_EDGES) and a computed perception matrix. The generation model embeds the spatial relationships directly on each location as adjacency lists. The containment hierarchy (`parent`) and the fixed location type enum were dropped in favor of a flat location graph with freeform types -- this supports any era and setting (buildings, rooms, campsites, orbital modules, etc.) without constraining the spatial model. The perception edges (`visibleFrom`, `audibleFrom`) are the key innovation from the moonstone-packet: they constrain who could have witnessed what, which drives the `involvement` computation on events during generation.
 
 Locations in this project are *generation scaffolding*, not player-facing. Players interact with `CasebookEntry` objects instead (see below).
 
@@ -59,7 +59,7 @@ Locations in this project are *generation scaffolding*, not player-facing. Playe
 The moonstone-packet builds a matrix of Narrators x Events, where each cell is a coverage type: `direct`, `hearsay`, `retrospective`, `inferred`, `not_covered`. This tracks which narrators cover which events and how they learned about them.
 
 **Inverted as**: Two structures working together:
-- `CausalEvent.involvement: Record<string, InvolvementType>` -- how each character is connected to each event (agent, participant, witness_visual, witness_auditory, informed_after, discovered_evidence)
+- `CausalEvent.involvement: Record<string, InvolvementType>` -- how each character is connected to each event (agent, participant, witness_direct, witness_visual, witness_auditory, informed_after, discovered_evidence)
 - `CasebookEntry.revealsFactIds: string[]` -- which facts are discoverable at each visitable address
 
 **What changed**: The extraction model maps narrators to events (who tells which part of the story). The generation model splits this into two concerns: (1) how characters are connected to events (involvement, which shapes what they know and can say), and (2) what information is available at each casebook address (revealsFactIds, which drives the game mechanic). The coverage types were adapted into `InvolvementType` to better reflect the generation context.
@@ -72,9 +72,9 @@ The concept of "narrators" (from the multi-narrator novel structure) becomes "ca
 
 The moonstone-packet documents each character with: Role/Position, What They Know and When, What They Want, What They Hide, Key Actions.
 
-**Inverted as**: `Character` interface with `characterId`, `name`, `role`, `description`, `wants[]`, `hides[]`, `knowledgeState`, `tone`.
+**Inverted as**: `Character` interface with `characterId`, `name`, `mysteryRole`, `societalRole`, `description`, `wants[]`, `hides[]`, `knowledgeState`, `tone`, `currentStatus?`.
 
-**What changed**: The "What They Know and When" becomes `knowledgeState` (a Record, not prose). "Key Actions" is dropped -- in the generation model, a character's actions are represented by their appearance as `agent` or `participant` in events. The `tone` field was added to support scene generation (see below).
+**What changed**: The "What They Know and When" becomes `knowledgeState` (a Record, not prose). "Key Actions" is dropped -- in the generation model, a character's actions are represented by their appearance as `agent` or `participant` in events. The single `role` was split into `mysteryRole` (narrative function like victim/suspect, used in prompts only) and `societalRole` (occupation/station like Landlady, shown to players). The `tone` field was added to support scene generation (see below). The optional `currentStatus` field (e.g. "deceased", "missing") guides casebook and prose generation about who can be met.
 
 ### TONE.md -> `ToneProfile`
 
@@ -98,10 +98,10 @@ The moonstone-packet builds a DAG where the actual event chain is the spine, and
 
 | Moonstone-Packet Structure | Source File | Consulting-Detective Type | Key Adaptation |
 |---|---|---|---|
-| EVENTS + CAUSAL_EDGES | build_causal_chain_graph.py | `CausalEvent` | Embedded edges, added involvement map |
-| FACTS + KNOWLEDGE_STATES | build_knowledge_state_graph.py | `Fact` + `Character.knowledgeState` | Dropped temporal tracking, kept bipartite structure |
-| LOCATIONS + SPATIAL_EDGES | build_location_graph.py | `Location` | Embedded edges as adjacency lists, perception edges preserved |
-| Coverage Matrix (Narrators x Events) | build_event_perspective_matrix.py | `CausalEvent.involvement` + `CasebookEntry.revealsFactIds` | Split narrator coverage into event involvement + entry fact distribution |
-| Character template (know/want/hide) | CHARACTERS.md | `Character` | Added tone, dropped prose-format knowledge tracking |
+| EVENTS + CAUSAL_EDGES | build_causal_chain_graph.py | `CausalEvent` | Embedded edges, added involvement map with generic `witness_direct` type |
+| FACTS + KNOWLEDGE_STATES | build_knowledge_state_graph.py | `Fact` + `Character.knowledgeState` | Dropped temporal tracking and `believes_false`, kept bipartite structure |
+| LOCATIONS + SPATIAL_EDGES | build_location_graph.py | `Location` | Flat graph with freeform types, `accessibleFrom` + perception edges |
+| Coverage Matrix (Narrators x Events) | build_event_perspective_matrix.py | `CausalEvent.involvement` + `CasebookEntry.revealsFactIds` | Split narrator coverage into event involvement + gated entry fact distribution |
+| Character template (know/want/hide) | CHARACTERS.md | `Character` | Added tone + currentStatus, split role into mysteryRole/societalRole |
 | Narrator voice profiles | TONE.md | `ToneProfile` | Compressed to generation-minimal specification |
 | Counterfactual DAG | build_counterfactual_dag.py | (future: template variants) | Not yet implemented |

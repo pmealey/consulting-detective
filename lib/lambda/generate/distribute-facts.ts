@@ -1,6 +1,6 @@
 import { callModel } from '../shared/bedrock';
 import {
-  DistributeFactsResultSchema,
+  GenerateFactsResultSchema,
   type CaseGenerationState,
 } from '../shared/generation-state';
 
@@ -23,7 +23,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   // Gather all fact placeholders from events
   const factPlaceholders = [...new Set(Object.values(events).flatMap((e) => e.reveals))];
 
-  const systemPrompt = `You are a mystery fact designer. Given the case structure so far — events, characters, and locations — you define the discoverable facts that form the knowledge atoms of the mystery.
+  const systemPrompt = `You are a mystery designer for a mystery game. Given the case structure so far — events, characters, and locations — you define the discoverable facts that form the knowledge atoms of the mystery.
 
 First, briefly reason through what facts the mystery needs: what evidence points to the truth, what red herrings exist, and how facts distribute across categories. Then provide the JSON.
 
@@ -46,19 +46,19 @@ The "person" and "place" categories are **identity atoms** — they establish th
 
 **Person facts** — one per character relevant to the mystery. The description should be a short noun-phrase identifier: a name and role/title.
   Examples:
-  - factId: "fact_marsh", category: "person", description: "Harold Marsh, co-owner of Marsh & Foller Import/Export Company"
-  - factId: "fact_lestrade", category: "person", description: "Inspector Lestrade of Scotland Yard"
+  - factId: "fact_harold_marsh", category: "person", description: "Harold Marsh, co-owner of Marsh & Foller Import/Export Company"
+  - factId: "fact_inspector_lestrade", category: "person", description: "Inspector Lestrade of Scotland Yard"
 
 **Place facts** — one per location that will become a casebook entry. The description should be a short noun-phrase: a name and brief descriptor.
   Examples:
-  - factId: "fact_warehouse", category: "place", description: "Warehouse at Limehouse"
-  - factId: "fact_pemberton_study", category: "place", description: "Lord Pemberton's study at Pemberton Hall"
+  - factId: "fact_warehouse_limehouse", category: "place", description: "Warehouse on Limehouse Street"
+  - factId: "fact_lord_pemberton_study", category: "place", description: "Lord Pemberton's study at Pemberton Hall"
 
 Person/place facts do NOT embed relational meaning. Relational and evidentiary meaning about persons/places belongs in separate facts with existing categories:
-  - "fact_marsh" (person): "Harold Marsh, co-owner of Marsh & Foller"
-  - "fact_marsh_partner" (relationship): "Harold Marsh was the victim's business partner"
-  - "fact_marsh_debt" (motive): "Marsh owed the victim 400 pounds"
-  - "fact_warehouse" (place): "Warehouse at Limehouse"
+  - "fact_harold_marsh" (person): "Harold Marsh, co-owner of Marsh & Foller"
+  - "fact_harold_marsh_partner" (relationship): "Harold Marsh was the victim's business partner"
+  - "fact_harold_marsh_debt" (motive): "Marsh owed the victim 400 pounds"
+  - "fact_warehouse_limehouse" (place): "Warehouse on Limehouse Street"
 
 The remaining categories — motive, means, opportunity, alibi, relationship, timeline, physical_evidence, background — are relational or evidentiary claims: specific, concrete things a detective discovers about the case.
 
@@ -72,15 +72,16 @@ Choose 2-4 facts as "introductionFactIds" — these are the facts the player lea
 ## Guidelines
 
 - Create a fact for each placeholder referenced in the events' "reveals" arrays.
+- Create a fact for each fact ID placeholder in the "hides" arrays of the characters.
 - Create one **person** fact for each character relevant to the mystery.
-- Create one **place** fact for each location likely to become a casebook entry.
-- Add additional relational/evidentiary facts so the total reaches 15-30 facts:
-  * At least 2 motive facts
-  * At least 1 means fact
-  * At least 1 opportunity fact
-  * At least 2 relationship facts
-  * A mix of timeline and physical evidence facts
-  * Some background facts (interesting but not required for the quiz — red herring fodder)
+- Create one **place** fact for each location.
+- Add additional relational/evidentiary facts:
+  * At least 4 motive facts
+  * At least 2 means fact
+  * At least 2 opportunity fact
+  * At least 4 relationship facts
+  * At least 2 background facts
+  * A mix of timeline and physical_evidence facts
 - Facts should be specific and concrete: "The victim owed Blackwood £400" not "The victim had debts."
 - Fact descriptions should be what a detective discovers, not authorial commentary.`;
 
@@ -114,7 +115,7 @@ Define all facts. Each placeholder must become a concrete fact. Create person fa
       thinkingTokens: 2048,
       temperature: 0.7,
     },
-    (raw) => DistributeFactsResultSchema.parse(raw),
+    (raw) => GenerateFactsResultSchema.parse(raw),
   );
 
   return {
