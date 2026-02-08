@@ -20,13 +20,6 @@ export interface Fact {
 
   /** What aspect of the mystery this fact relates to */
   category: FactCategory;
-
-  /**
-   * Whether this fact is required to answer at least one question.
-   * Derivable from questions.requiredFacts, but useful during generation
-   * to ensure coverage.
-   */
-  critical: boolean;
 }
 
 export type FactCategory =
@@ -37,7 +30,9 @@ export type FactCategory =
   | 'relationship'
   | 'timeline'
   | 'physical_evidence'
-  | 'background';
+  | 'background'
+  | 'person'
+  | 'place';
 
 /**
  * A character's knowledge status about a specific fact.

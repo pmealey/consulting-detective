@@ -1,6 +1,6 @@
 import { callModel } from '../shared/bedrock';
 import {
-  FactsSchema,
+  DistributeFactsResultSchema,
   type CaseGenerationState,
 } from '../shared/generation-state';
 
@@ -8,7 +8,9 @@ import {
  * Pipeline Step 5: Distribute Facts
  *
  * Extracts facts from the event chain and character knowledge,
- * tags each with a category, and marks critical facts.
+ * tags each with a category. Creates person and place identity atoms
+ * alongside relational/evidentiary facts. Selects 2-4 introduction
+ * facts that seed the player's investigation.
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
   const { input, template, events, characters, locations } = state;
@@ -25,27 +27,60 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
 
 First, briefly reason through what facts the mystery needs: what evidence points to the truth, what red herrings exist, and how facts distribute across categories. Then provide the JSON.
 
-Your response must end with valid JSON: a Record<string, Fact> keyed by factId.
+Your response must end with valid JSON matching this structure:
+{
+  "facts": Record<string, Fact>,
+  "introductionFactIds": string[]   // 2-4 factIds revealed in the opening briefing
+}
 
-Each fact must match this schema:
+Each Fact must match this schema:
 {
   "factId": string,             // e.g. "fact_victim_left_handed"
   "description": string,        // clear, specific description
-  "category": "motive" | "means" | "opportunity" | "alibi" | "relationship" | "timeline" | "physical_evidence" | "background",
-  "critical": boolean           // true if this fact is needed to answer key questions
+  "category": "motive" | "means" | "opportunity" | "alibi" | "relationship" | "timeline" | "physical_evidence" | "background" | "person" | "place"
 }
 
-Guidelines:
+## Fact categories
+
+The "person" and "place" categories are **identity atoms** — they establish that an entity exists and what it is. They are NOT relational claims.
+
+**Person facts** — one per character relevant to the mystery. The description should be a short noun-phrase identifier: a name and role/title.
+  Examples:
+  - factId: "fact_marsh", category: "person", description: "Harold Marsh, co-owner of Marsh & Foller Import/Export Company"
+  - factId: "fact_lestrade", category: "person", description: "Inspector Lestrade of Scotland Yard"
+
+**Place facts** — one per location that will become a casebook entry. The description should be a short noun-phrase: a name and brief descriptor.
+  Examples:
+  - factId: "fact_warehouse", category: "place", description: "Warehouse at Limehouse"
+  - factId: "fact_pemberton_study", category: "place", description: "Lord Pemberton's study at Pemberton Hall"
+
+Person/place facts do NOT embed relational meaning. Relational and evidentiary meaning about persons/places belongs in separate facts with existing categories:
+  - "fact_marsh" (person): "Harold Marsh, co-owner of Marsh & Foller"
+  - "fact_marsh_partner" (relationship): "Harold Marsh was the victim's business partner"
+  - "fact_marsh_debt" (motive): "Marsh owed the victim 400 pounds"
+  - "fact_warehouse" (place): "Warehouse at Limehouse"
+
+The remaining categories — motive, means, opportunity, alibi, relationship, timeline, physical_evidence, background — are relational or evidentiary claims: specific, concrete things a detective discovers about the case.
+
+## Introduction facts
+
+Choose 2-4 facts as "introductionFactIds" — these are the facts the player learns from the opening briefing (e.g. the crime that was committed, the victim's identity, the investigator in charge). Introduction facts should:
+- Be enough to make several casebook entries reachable (they seed the investigation)
+- NOT give away so much that nothing remains gated
+- Typically include the victim (person fact), the crime scene (place fact), and 1-2 key setting facts
+
+## Guidelines
+
 - Create a fact for each placeholder referenced in the events' "reveals" arrays.
-- Add additional facts (8-20 total) that flesh out the mystery:
+- Create one **person** fact for each character relevant to the mystery.
+- Create one **place** fact for each location likely to become a casebook entry.
+- Add additional relational/evidentiary facts so the total reaches 15-30 facts:
   * At least 2 motive facts
   * At least 1 means fact
   * At least 1 opportunity fact
   * At least 2 relationship facts
   * A mix of timeline and physical evidence facts
-  * Some background facts (interesting but not critical — these become red herring fodder)
-- About 40-60% of facts should be "critical": true (needed to solve the case).
-- The rest are non-critical: interesting but not required for the quiz.
+  * Some background facts (interesting but not required for the quiz — red herring fodder)
 - Facts should be specific and concrete: "The victim owed Blackwood £400" not "The victim had debts."
 - Fact descriptions should be what a detective discovers, not authorial commentary.`;
 
@@ -65,24 +100,25 @@ Characters:
 ${Object.values(characters).map((c) => `  - ${c.name} (${c.mysteryRole}, ${c.societalRole}): wants=[${c.wants.join('; ')}], hides=[${c.hides.join('; ')}]`).join('\n')}
 
 Key locations:
-${Object.values(locations).map((l) => `  - ${l.name} (${l.type})`).join('\n')}
+${Object.values(locations).map((l) => `  - ${l.locationId}: ${l.name} (${l.type})`).join('\n')}
 
-Define all facts. Each placeholder must become a concrete fact. Add additional facts to reach the 8-20 range. Think through what evidence the mystery needs first, then provide the JSON.`;
+Define all facts. Each placeholder must become a concrete fact. Create person facts for each character and place facts for each key location. Add relational/evidentiary facts to flesh out the mystery. Choose 2-4 introduction facts that seed the investigation. Think through what evidence the mystery needs first, then provide the JSON.`;
 
-  const { data: facts } = await callModel(
+  const { data: result } = await callModel(
     {
       stepName: 'distributeFacts',
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,
-      maxTokens: 4096,
+      maxTokens: 8192,
       temperature: 0.7,
     },
-    (raw) => FactsSchema.parse(raw),
+    (raw) => DistributeFactsResultSchema.parse(raw),
   );
 
   return {
     ...state,
-    facts,
+    facts: result.facts,
+    introductionFactIds: result.introductionFactIds,
   };
 };

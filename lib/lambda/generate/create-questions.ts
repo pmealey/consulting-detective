@@ -19,7 +19,6 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   if (!facts) throw new Error('Step 8 requires facts from step 5');
   if (!casebook) throw new Error('Step 8 requires casebook from step 6');
 
-  const criticalFacts = Object.values(facts).filter((f) => f.critical);
   const difficulty = template.difficulty;
 
   const systemPrompt = `You are a quiz designer for a detective mystery game. You create end-of-case questions that test whether the player has found and connected the right evidence.
@@ -46,10 +45,9 @@ Guidelines:
   * "Why" questions (motive) — usually worth 10-15 points
   * "How" questions (method/means) — usually worth 10-15 points
   * "What" questions (what happened, what was the connection) — usually worth 5-10 points
-- Each question's requiredFacts must reference actual critical fact IDs from the case.
+- Each question's requiredFacts must reference actual fact IDs from the case.
 - Each requiredFacts array should contain 2-4 facts (player must connect multiple pieces of evidence).
 - The answer should be deducible from ONLY the required facts — no outside knowledge needed.
-- Together, the questions' requiredFacts should cover ALL critical facts (every critical fact appears in at least one question).
 - Point values: easy=5-10, medium=10-15, hard=15-20.`;
 
   const userPrompt = `Here is the case context:
@@ -63,9 +61,6 @@ ${Object.values(events).sort((a, b) => a.timestamp - b.timestamp).map((e) => `  
 
 Characters:
 ${Object.values(characters).map((c) => `  - ${c.name} (${c.mysteryRole}, ${c.societalRole}): wants=[${c.wants.join('; ')}], hides=[${c.hides.join('; ')}]`).join('\n')}
-
-Critical facts (all must be covered by at least one question's requiredFacts):
-${criticalFacts.map((f) => `  - ${f.factId}: ${f.description} [${f.category}]`).join('\n')}
 
 Where facts are found (casebook entries):
 ${Object.values(casebook).map((e) => `  - ${e.label}: reveals [${e.revealsFactIds.join(', ')}]`).join('\n')}

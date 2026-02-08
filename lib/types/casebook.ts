@@ -40,6 +40,13 @@ export interface CasebookEntry {
 
   /** factIds discoverable by visiting this entry */
   revealsFactIds: string[];
+
+  /**
+   * Entry is hidden until the player discovers ANY ONE of these facts.
+   * OR-logic: any single fact in the list unlocks the entry.
+   * Every entry must be gated — the introduction facts are the sole seeds.
+   */
+  requiresAnyFact: string[];
 }
 
 export type EntryType = 'location' | 'person' | 'document' | 'event';

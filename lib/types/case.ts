@@ -56,6 +56,9 @@ export interface Case {
   /** End-of-case quiz questions. Ordered -- presented sequentially. */
   questions: Question[];
 
+  /** factIds revealed by reading the introduction -- seeds the investigation */
+  introductionFactIds: string[];
+
   /** Casebook entryIds in order -- the optimal investigation path (Holmes's solution) */
   optimalPath: string[];
 

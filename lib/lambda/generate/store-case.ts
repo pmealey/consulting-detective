@@ -21,7 +21,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   const {
     input, template, events, characters, locations, facts,
     casebook, prose, introduction, title, questions, optimalPath,
-    validationResult,
+    introductionFactIds, validationResult,
   } = state;
 
   if (!validationResult?.valid) {
@@ -32,7 +32,8 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   }
 
   if (!template || !events || !characters || !locations || !facts ||
-      !casebook || !prose || !introduction || !title || !questions || !optimalPath) {
+      !casebook || !prose || !introduction || !title || !questions || !optimalPath ||
+      introductionFactIds == null) {
     throw new Error('Cannot store case: incomplete generation state');
   }
 
@@ -88,7 +89,6 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       factId: draft.factId,
       description: draft.description,
       category: draft.category as FactCategory,
-      critical: draft.critical,
     };
   }
 
@@ -103,6 +103,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       scene: prose[id] ?? '',
       characters: draft.characters,
       revealsFactIds: draft.revealsFactIds,
+      requiresAnyFact: draft.requiresAnyFact ?? [],
     };
   }
 
@@ -130,6 +131,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     casebook: finalCasebook,
     facts: finalFacts,
     questions: finalQuestions,
+    introductionFactIds,
     optimalPath,
     difficulty: template.difficulty as Difficulty,
   };

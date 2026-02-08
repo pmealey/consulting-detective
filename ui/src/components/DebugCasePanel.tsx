@@ -11,6 +11,7 @@ import type {
 
 const SECTIONS = [
   'Overview',
+  'Discovery',
   'Events',
   'Characters',
   'Locations',
@@ -79,6 +80,26 @@ function OverviewSection({ gameCase }: { gameCase: Case }) {
         </pre>
       </div>
       <div>
+        <div className="text-stone-500 font-medium text-sm mb-2">introductionFactIds</div>
+        <ul className="list-disc list-inside space-y-0.5 font-mono text-xs text-stone-600">
+          {(gameCase.introductionFactIds ?? []).length === 0 ? (
+            <li className="text-stone-400">—</li>
+          ) : (
+            gameCase.introductionFactIds!.map((fid) => {
+              const fact = gameCase.facts[fid];
+              return (
+                <li key={fid}>
+                  <span className="text-stone-500">{fid}</span>
+                  {fact && (
+                    <span className="text-stone-600 ml-1">— {fact.description}</span>
+                  )}
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </div>
+      <div>
         <div className="text-stone-500 font-medium text-sm mb-2">optimalPath</div>
         <ol className="list-decimal list-inside space-y-1 font-mono text-xs">
           {gameCase.optimalPath.map((entryId, i) => {
@@ -135,6 +156,72 @@ function EventRow({ event }: { event: CausalEvent }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function DiscoverySection({ gameCase }: { gameCase: Case }) {
+  const introIds = gameCase.introductionFactIds ?? [];
+  const entries = Object.values(gameCase.casebook);
+  const gatedEntries = entries.filter(
+    (e) => e.requiresAnyFact && e.requiresAnyFact.length > 0,
+  );
+  const alwaysVisible = entries.filter(
+    (e) => !e.requiresAnyFact || e.requiresAnyFact.length === 0,
+  );
+  return (
+    <div className="space-y-6">
+      <div>
+        <h4 className="text-sm font-semibold text-stone-700 mb-2">Introduction facts (seeds)</h4>
+        <ul className="list-disc list-inside text-sm text-stone-600 space-y-0.5">
+          {introIds.length === 0 ? (
+            <li className="text-stone-400">None</li>
+          ) : (
+            introIds.map((fid) => {
+              const fact = gameCase.facts[fid];
+              return (
+                <li key={fid}>
+                  <span className="font-mono text-xs text-stone-500">{fid}</span>
+                  {fact && <span className="ml-1">— {fact.description}</span>}
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </div>
+      <div>
+        <h4 className="text-sm font-semibold text-stone-700 mb-2">Always-visible entries</h4>
+        <p className="text-xs text-stone-500 mb-1">No requiresAnyFact (or empty)</p>
+        <ul className="list-disc list-inside text-sm text-stone-600 space-y-0.5">
+          {alwaysVisible.length === 0 ? (
+            <li className="text-stone-400">None</li>
+          ) : (
+            alwaysVisible.map((e) => (
+              <li key={e.entryId}>
+                <span className="font-mono text-xs text-stone-500">{e.entryId}</span>
+                <span className="ml-1">— {e.label}</span>
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
+      <div>
+        <h4 className="text-sm font-semibold text-stone-700 mb-2">Gated entries</h4>
+        <p className="text-xs text-stone-500 mb-2">Unlock when any fact in requiresAnyFact is discovered</p>
+        <ul className="space-y-2">
+          {gatedEntries.map((e) => (
+            <li key={e.entryId} className="border border-stone-200 rounded p-2 text-sm">
+              <div className="font-medium text-stone-800">{e.label}</div>
+              <div className="font-mono text-xs text-stone-500 mt-0.5">
+                requiresAnyFact: {e.requiresAnyFact!.join(', ')}
+              </div>
+              <div className="text-xs text-stone-500 mt-0.5">
+                reveals: {e.revealsFactIds.length ? e.revealsFactIds.join(', ') : '—'}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -273,6 +360,8 @@ function LocationsSection({ gameCase }: { gameCase: Case }) {
 
 function CasebookEntryRow({ entry }: { entry: CasebookEntry }) {
   const [open, setOpen] = useState(false);
+  const gate = entry.requiresAnyFact;
+  const isGated = gate && gate.length > 0;
   return (
     <div className="border border-stone-200 rounded-lg overflow-hidden">
       <button
@@ -282,12 +371,24 @@ function CasebookEntryRow({ entry }: { entry: CasebookEntry }) {
       >
         <span className="font-medium text-sm">{entry.label}</span>
         <span className="font-mono text-xs text-stone-500">{entry.entryId}</span>
+        {isGated && (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 shrink-0 ml-1">
+            gated
+          </span>
+        )}
       </button>
       {open && (
         <div className="p-3 pt-0 space-y-2 text-sm border-t border-stone-200">
           <KeyValue label="address" value={entry.address} />
           <KeyValue label="locationId" value={entry.locationId} mono />
           <KeyValue label="type" value={entry.type} mono />
+          {isGated && (
+            <KeyValue
+              label="requiresAnyFact"
+              value={gate!.join(', ')}
+              mono
+            />
+          )}
           <KeyValue
             label="characters"
             value={entry.characters.length ? entry.characters.join(', ') : '—'}
@@ -325,7 +426,13 @@ function CasebookSection({ gameCase }: { gameCase: Case }) {
   );
 }
 
-function FactRow({ fact }: { fact: Fact }) {
+function FactRow({
+  fact,
+  requiredByQuestionCount,
+}: {
+  fact: Fact;
+  requiredByQuestionCount: number;
+}) {
   return (
     <div className="border border-stone-200 rounded-lg p-3 text-sm">
       <div className="flex items-center justify-between gap-2 mb-1">
@@ -333,9 +440,9 @@ function FactRow({ fact }: { fact: Fact }) {
         <span className="text-xs px-1.5 py-0.5 rounded bg-stone-200 text-stone-600">
           {fact.category}
         </span>
-        {fact.critical && (
+        {requiredByQuestionCount > 0 && (
           <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
-            critical
+            required by {requiredByQuestionCount} question{requiredByQuestionCount !== 1 ? 's' : ''}
           </span>
         )}
       </div>
@@ -348,12 +455,24 @@ function FactsSection({ gameCase }: { gameCase: Case }) {
   const facts = Object.values(gameCase.facts).sort((a, b) =>
     a.factId.localeCompare(b.factId),
   );
+  const requiredByCount: Record<string, number> = {};
+  for (const q of gameCase.questions) {
+    for (const fid of q.requiredFacts ?? []) {
+      requiredByCount[fid] = (requiredByCount[fid] ?? 0) + 1;
+    }
+  }
   return (
     <div className="space-y-2">
       {facts.length === 0 ? (
         <p className="text-stone-500 text-sm">No facts.</p>
       ) : (
-        facts.map((f) => <FactRow key={f.factId} fact={f} />)
+        facts.map((f) => (
+          <FactRow
+            key={f.factId}
+            fact={f}
+            requiredByQuestionCount={requiredByCount[f.factId] ?? 0}
+          />
+        ))
       )}
     </div>
   );
@@ -397,6 +516,8 @@ export function DebugCasePanel({ gameCase, onClose }: DebugCasePanelProps) {
     switch (activeSection) {
       case 'Overview':
         return <OverviewSection gameCase={gameCase} />;
+      case 'Discovery':
+        return <DiscoverySection gameCase={gameCase} />;
       case 'Events':
         return <EventsSection gameCase={gameCase} />;
       case 'Characters':

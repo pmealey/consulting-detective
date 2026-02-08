@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.ts';
 import {
@@ -13,7 +13,7 @@ import { FactsList } from '../components/FactsList.tsx';
 import { QuestionForm } from '../components/QuestionForm.tsx';
 import { QuestionsAnsweredView } from '../components/QuestionsAnsweredView.tsx';
 import { DebugCasePanel } from '../components/DebugCasePanel.tsx';
-import type { Case, PlayerSession, PlayerAnswer, CaseResult } from '@shared/index';
+import type { Case, CasebookEntry, PlayerSession, PlayerAnswer, CaseResult } from '@shared/index';
 
 type Phase = 'loading' | 'investigation';
 
@@ -52,20 +52,27 @@ export function CasePage() {
 
           // Check for existing session
           const existing = getSession(caseDate);
+          const introIds = res.data.introductionFactIds ?? [];
           if (existing) {
-            setSession(existing);
+            // Ensure intro facts are in discoveredFacts (merge for old saves)
+            const mergedFacts = [...new Set([...introIds, ...existing.discoveredFacts])];
+            const sessionToUse =
+              mergedFacts.length !== existing.discoveredFacts.length
+                ? { ...existing, discoveredFacts: mergedFacts }
+                : existing;
+            if (sessionToUse !== existing) saveSession(sessionToUse);
+            setSession(sessionToUse);
             if (existing.completedAt) {
               // Already completed -- show investigation with answers in Questions card
-              setResult(computeResult(existing, res.data));
+              setResult(computeResult(sessionToUse, res.data));
               setPhase('investigation');
               setSelectedEntryId(QUESTIONS_VIEW_ID);
             } else {
-              // In progress or new -- go to investigation
               setPhase('investigation');
             }
           } else {
-            // No session yet -- create one and go to investigation
-            setSession(createSession(caseDate));
+            // No session yet -- create one seeded with intro facts
+            setSession(createSession(caseDate, introIds));
             setPhase('investigation');
           }
         } else {
@@ -145,6 +152,33 @@ export function CasePage() {
       </div>
     );
   }
+
+  // Visible casebook entries: no gate, or gate satisfied by discovered facts
+  const visibleEntries = useMemo((): Record<string, CasebookEntry> => {
+    if (!gameCase || !session) return {};
+    const discovered = new Set(session.discoveredFacts);
+    return Object.fromEntries(
+      Object.entries(gameCase.casebook).filter(([, e]) => {
+        const gate = e.requiresAnyFact;
+        return !gate?.length || gate.some((fid) => discovered.has(fid));
+      }),
+    );
+  }, [gameCase?.casebook, session?.discoveredFacts]);
+
+  // Entry ids that just became visible due to the current visit (for "New lead!" indicator)
+  const newlyVisibleEntryIds = useMemo(() => {
+    if (!newVisitEntryId || !gameCase || !session) return new Set<string>();
+    const entry = gameCase.casebook[newVisitEntryId];
+    if (!entry) return new Set<string>();
+    const revealedByVisit = new Set(entry.revealsFactIds);
+    const result = new Set<string>();
+    for (const [, e] of Object.entries(visibleEntries)) {
+      if (e.entryId === newVisitEntryId) continue;
+      const gate = e.requiresAnyFact;
+      if (gate?.length && gate.some((fid) => revealedByVisit.has(fid))) result.add(e.entryId);
+    }
+    return result;
+  }, [newVisitEntryId, gameCase?.casebook, visibleEntries]);
 
   // Investigation
   if (phase === 'investigation') {
@@ -263,8 +297,9 @@ export function CasePage() {
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <CasebookList
-                  entries={gameCase.casebook}
+                  entries={visibleEntries}
                   visitedEntryIds={session?.visitedEntries ?? []}
+                  newlyVisibleEntryIds={newlyVisibleEntryIds}
                   selectedEntryId={
                     selectedEntryId === FACTS_VIEW_ID || selectedEntryId === QUESTIONS_VIEW_ID
                       ? null
@@ -337,6 +372,27 @@ export function CasePage() {
                       </p>
                     ))}
                   </div>
+                  {(gameCase.introductionFactIds?.length ?? 0) > 0 && (
+                    <div className="border-t border-stone-200 pt-4">
+                      <h4 className="text-sm font-semibold text-emerald-700 mb-2">
+                        Facts from the briefing
+                      </h4>
+                      <ul className="space-y-1">
+                        {gameCase.introductionFactIds!
+                          .map((id) => gameCase.facts[id])
+                          .filter(Boolean)
+                          .map((fact) => (
+                            <li
+                              key={fact.factId}
+                              className="flex items-start gap-2 text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2"
+                            >
+                              <span className="text-emerald-500 mt-0.5">+</span>
+                              <span>{fact.description}</span>
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

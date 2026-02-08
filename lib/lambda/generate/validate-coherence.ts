@@ -8,16 +8,16 @@ import type {
  *
  * Structural validation of the fully assembled case. Checks:
  * - Referential integrity (all IDs point to real objects)
- * - Every critical fact is reachable via at least one casebook entry
- * - Every question's requiredFacts are all discoverable
- * - The optimal path covers all required facts
+ * - introductionFactIds and requiresAnyFact reference valid factIds
+ * - Every question's requiredFacts are in the discovery-graph reachable set
+ * - The optimal path is gate-feasible and covers all required facts
  * - Character knowledge states are consistent with event involvement
  * - Location graph integrity (symmetric adjacency, valid parents)
  *
  * This is pure logic — no LLM call needed.
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { events, characters, locations, facts, casebook, questions, optimalPath } = state;
+  const { events, characters, locations, facts, casebook, questions, optimalPath, introductionFactIds, discoveryGraphResult } = state;
 
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -103,46 +103,56 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
         errors.push(`CasebookEntry ${entry.entryId}: revealsFactIds references unknown fact "${factId}"`);
       }
     }
-  }
-
-  // ---- Fact Reachability ----
-  const discoverableFactIds = new Set(
-    Object.values(casebook).flatMap((e) => e.revealsFactIds),
-  );
-  const criticalFacts = Object.values(facts).filter((f) => f.critical);
-  for (const fact of criticalFacts) {
-    if (!discoverableFactIds.has(fact.factId)) {
-      errors.push(`Critical fact "${fact.factId}" is not discoverable via any casebook entry`);
-    }
-  }
-
-  // ---- Question Validation ----
-  for (const question of questions) {
-    for (const factId of question.requiredFacts) {
+    const gateFacts = entry.requiresAnyFact ?? [];
+    for (const factId of gateFacts) {
       if (!factIds.has(factId)) {
-        errors.push(`Question ${question.questionId}: requiredFacts references unknown fact "${factId}"`);
-      } else if (!discoverableFactIds.has(factId)) {
-        errors.push(`Question ${question.questionId}: required fact "${factId}" is not discoverable`);
+        errors.push(`CasebookEntry ${entry.entryId}: requiresAnyFact references unknown fact "${factId}"`);
       }
     }
   }
 
-  // Check all critical facts are covered by at least one question
-  const questionRequiredFacts = new Set(questions.flatMap((q) => q.requiredFacts));
-  for (const fact of criticalFacts) {
-    if (!questionRequiredFacts.has(fact.factId)) {
-      warnings.push(`Critical fact "${fact.factId}" is not required by any question`);
+  // ---- introductionFactIds Validation ----
+  if (introductionFactIds) {
+    for (const factId of introductionFactIds) {
+      if (!factIds.has(factId)) {
+        errors.push(`introductionFactIds references unknown fact "${factId}"`);
+      }
     }
   }
 
-  // ---- Optimal Path Validation ----
-  const optimalCoveredFacts = new Set<string>();
+  // ---- Question reachability (reuse discovery graph reachable set) ----
+  if (!discoveryGraphResult?.valid || !discoveryGraphResult.reachableFactIds) {
+    errors.push('Discovery graph was not validated or is invalid; cannot verify question-fact reachability');
+  }
+  const reachableFactIds = discoveryGraphResult?.reachableFactIds
+    ? new Set(discoveryGraphResult.reachableFactIds)
+    : null;
+  const questionRequiredFacts = new Set(questions.flatMap((q) => q.requiredFacts));
+
+  for (const question of questions) {
+    for (const factId of question.requiredFacts) {
+      if (!factIds.has(factId)) {
+        errors.push(`Question ${question.questionId}: requiredFacts references unknown fact "${factId}"`);
+      } else if (reachableFactIds && !reachableFactIds.has(factId)) {
+        errors.push(`Question ${question.questionId}: required fact "${factId}" is not reachable from introduction and casebook`);
+      }
+    }
+  }
+
+  // ---- Optimal Path Validation (gate-feasible + covers required facts) ----
+  const optimalCoveredFacts = new Set<string>(introductionFactIds ?? []);
   for (const entryId of optimalPath) {
     if (!entryIds.has(entryId)) {
       errors.push(`Optimal path references unknown entry "${entryId}"`);
       continue;
     }
-    for (const factId of casebook[entryId].revealsFactIds) {
+    const entry = casebook[entryId];
+    const gateFacts = entry.requiresAnyFact ?? [];
+    const isAlwaysVisible = gateFacts.length === 0;
+    if (!isAlwaysVisible && !gateFacts.some((f) => optimalCoveredFacts.has(f))) {
+      errors.push(`Optimal path: entry "${entryId}" is gated by [${gateFacts.join(', ')}] but none are covered before this visit`);
+    }
+    for (const factId of entry.revealsFactIds) {
       optimalCoveredFacts.add(factId);
     }
   }

@@ -38,12 +38,15 @@ export function getAllSessions(): Record<string, PlayerSession> {
   return sessions;
 }
 
-/** Create a new session for a case. */
-export function createSession(caseDate: string): PlayerSession {
+/** Create a new session for a case. Optionally seed with intro facts. */
+export function createSession(
+  caseDate: string,
+  introductionFactIds?: string[],
+): PlayerSession {
   const session: PlayerSession = {
     caseDate,
     visitedEntries: [],
-    discoveredFacts: [],
+    discoveredFacts: introductionFactIds ?? [],
     answers: [],
     startedAt: new Date().toISOString(),
   };

@@ -81,9 +81,15 @@ export interface CaseGenerationState {
 
   // -- Step 5: Distribute Facts --
   facts?: Record<string, FactDraft>;
+  introductionFactIds?: string[];
 
   // -- Step 6: Design Casebook --
   casebook?: Record<string, CasebookEntryDraft>;
+
+  // -- Step 6b: Validate Discovery Graph --
+  discoveryGraphResult?: DiscoveryGraphResult;
+  /** Number of times DesignCasebook has been retried after graph validation failure */
+  designCasebookRetries?: number;
 
   // -- Step 7: Generate Prose --
   prose?: Record<string, string>;
@@ -177,7 +183,6 @@ export interface FactDraft {
   factId: string;
   description: string;
   category: string;
-  critical: boolean;
 }
 
 export interface CasebookEntryDraft {
@@ -188,6 +193,7 @@ export interface CasebookEntryDraft {
   type: string;
   characters: string[];
   revealsFactIds: string[];
+  requiresAnyFact: string[];
 }
 
 export interface QuestionDraft {
@@ -203,6 +209,13 @@ export interface ValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];
+}
+
+export interface DiscoveryGraphResult {
+  valid: boolean;
+  errors: string[];
+  reachableFactIds: string[];
+  reachableEntryIds: string[];
 }
 
 // ============================================
@@ -303,10 +316,16 @@ export const FactsSchema = z.record(
     category: z.enum([
       'motive', 'means', 'opportunity', 'alibi',
       'relationship', 'timeline', 'physical_evidence', 'background',
+      'person', 'place',
     ]),
-    critical: z.boolean(),
   }),
 );
+
+/** Schema for step 5 output: facts + introductionFactIds */
+export const DistributeFactsResultSchema = z.object({
+  facts: FactsSchema,
+  introductionFactIds: z.array(z.string().min(1)).min(2).max(4),
+});
 
 export const CasebookSchema = z.record(
   z.string(),
@@ -318,6 +337,7 @@ export const CasebookSchema = z.record(
     type: z.enum(['location', 'person', 'document', 'event']),
     characters: z.array(z.string()),
     revealsFactIds: z.array(z.string()),
+    requiresAnyFact: z.array(z.string().min(1)).min(1),
   }),
 );
 

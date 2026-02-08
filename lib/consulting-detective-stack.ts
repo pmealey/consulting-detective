@@ -159,6 +159,13 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
     });
 
+    const validateDiscoveryGraphHandler = new nodejs.NodejsFunction(this, 'ValidateDiscoveryGraphHandler', {
+      entry: join(__dirname, 'lambda/generate/validate-discovery-graph.ts'),
+      environment: lambdaEnvironment,
+      ...bundlingConfig,
+      timeout: cdk.Duration.seconds(30),
+    });
+
     const validateCoherenceHandler = new nodejs.NodejsFunction(this, 'ValidateCoherenceHandler', {
       entry: join(__dirname, 'lambda/generate/validate-coherence.ts'),
       environment: lambdaEnvironment,
@@ -246,6 +253,11 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       outputPath: '$.Payload',
     });
 
+    const validateDiscoveryGraph = new tasks.LambdaInvoke(this, 'ValidateDiscoveryGraph', {
+      lambdaFunction: validateDiscoveryGraphHandler,
+      outputPath: '$.Payload',
+    });
+
     const generateProse = new tasks.LambdaInvoke(this, 'GenerateProse', {
       lambdaFunction: generateProseHandler,
       outputPath: '$.Payload',
@@ -271,14 +283,68 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       outputPath: '$.Payload',
     });
 
-    // Chain the steps into a sequential pipeline
+    // -- Discovery graph validation with retry loop --
+    // After DesignCasebook, validate the bipartite discovery graph.
+    // If invalid and retries remain, re-run DesignCasebook with error context.
+
+    const discoveryGraphFailed = new sfn.Fail(this, 'DiscoveryGraphFailed', {
+      cause: 'Discovery graph validation failed after maximum retries',
+      error: 'DiscoveryGraphInvalid',
+    });
+
+    // Increment the retry counter via a Pass state
+    const incrementRetries = new sfn.Pass(this, 'IncrementCasebookRetries', {
+      parameters: {
+        'input.$': '$.input',
+        'template.$': '$.template',
+        'events.$': '$.events',
+        'characters.$': '$.characters',
+        'locations.$': '$.locations',
+        'facts.$': '$.facts',
+        'introductionFactIds.$': '$.introductionFactIds',
+        'discoveryGraphResult.$': '$.discoveryGraphResult',
+        'designCasebookRetries.$': sfn.JsonPath.mathAdd(
+          sfn.JsonPath.numberAt('$.designCasebookRetries'),
+          1,
+        ),
+      },
+    });
+
+    // Initialize retry counter to 0 before the first DesignCasebook attempt
+    const initRetries = new sfn.Pass(this, 'InitCasebookRetries', {
+      resultPath: '$.designCasebookRetries',
+      result: sfn.Result.fromNumber(0),
+    });
+
+    const checkDiscoveryGraph = new sfn.Choice(this, 'CheckDiscoveryGraph')
+      .when(
+        sfn.Condition.booleanEquals('$.discoveryGraphResult.valid', true),
+        generateProse,
+      )
+      .when(
+        sfn.Condition.numberGreaterThanEquals('$.designCasebookRetries', 2),
+        discoveryGraphFailed,
+      )
+      .otherwise(incrementRetries);
+
+    // Retry loop: increment → re-run DesignCasebook → re-validate
+    incrementRetries.next(designCasebook);
+
+    // Wire: DesignCasebook → ValidateDiscoveryGraph → Choice
+    designCasebook.next(validateDiscoveryGraph);
+    validateDiscoveryGraph.next(checkDiscoveryGraph);
+
+    // Chain the steps into the pipeline with the retry loop
     const pipelineDefinition = selectTemplate
       .next(generateEvents)
       .next(populateCharacters)
       .next(buildLocations)
       .next(distributeFacts)
-      .next(designCasebook)
-      .next(generateProse)
+      .next(initRetries)
+      .next(designCasebook);
+
+    // Continue after generateProse (already wired via the Choice state)
+    generateProse
       .next(createQuestions)
       .next(computeOptimalPath)
       .next(validateCoherence)
