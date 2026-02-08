@@ -9,14 +9,12 @@ import {
   type LocationDraft,
 } from '../shared/generation-state';
 
-const BATCH_SIZE = 3;
-
 /**
- * Pipeline Step 7: Generate Prose Scenes (Batched)
+ * Pipeline Step 7: Generate Prose Scenes
  *
- * Generates prose in multiple calls to avoid token limits:
+ * Generates prose in two calls:
  *   1. One call for the introduction and title
- *   2. Batched calls for scenes (BATCH_SIZE entries per call)
+ *   2. One call for ALL casebook scenes (ensures cross-scene coherence)
  *
  * Each scene is filtered through present characters' knowledge states
  * and tone profiles.
@@ -92,38 +90,28 @@ Write the introduction. Plan your approach first, then provide the JSON.`;
       systemPrompt: introSystemPrompt,
       userPrompt: introUserPrompt,
       modelConfig: input.modelConfig,
-      maxTokens: 2048,
+      outputTokens: 1024,
+      thinkingTokens: 2048,
       temperature: 0.8,
     },
     (raw) => IntroductionSchema.parse(raw),
   );
 
-  // ---- Calls 2+: Scene Batches ----
+  // ---- Call 2: All Scenes ----
 
-  const allScenes: Record<string, string> = {};
+  const entryContexts = entries.map((entry) =>
+    buildEntryContext(entry, locations, characters, facts),
+  );
 
-  // Split entries into batches
-  const batches: CasebookEntryDraft[][] = [];
-  for (let i = 0; i < entries.length; i += BATCH_SIZE) {
-    batches.push(entries.slice(i, i + BATCH_SIZE));
-  }
+  const scenesSystemPrompt = `You are a Victorian-era mystery writer crafting prose scenes for a detective game. Each scene is what the player reads when they visit a casebook entry.
 
-  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-    const batch = batches[batchIdx];
-
-    const entryContexts = batch.map((entry) =>
-      buildEntryContext(entry, locations, characters, facts),
-    );
-
-    const batchSystemPrompt = `You are a Victorian-era mystery writer crafting prose scenes for a detective game. Each scene is what the player reads when they visit a casebook entry.
-
-First, briefly plan each scene: what the player experiences, how characters reveal or conceal information. Then provide the JSON.
+You are writing ALL scenes for this case in a single pass. Ensure consistency across scenes: if two characters describe the same event, their accounts should align (or deliberately conflict if one is lying). Recurring details (weather, time of day, physical descriptions) must be consistent.
 
 Your response must end with valid JSON: a Record<string, string> mapping entryId to prose scene text.
 
 ${sceneGuidelines}`;
 
-    const batchUserPrompt = `Here is the case context:
+  const scenesUserPrompt = `Here is the case context:
 
 Title: ${intro.title}
 Setting: ${template.era}, ${template.date}
@@ -132,32 +120,29 @@ Crime Type: ${template.crimeType}
 The story (chronological events):
 ${storyTimeline}
 
-Write scenes for these ${batch.length} casebook entries (batch ${batchIdx + 1} of ${batches.length}):
+Write scenes for all ${entries.length} casebook entries:
 
 ${entryContexts.join('\n\n')}
 
-Plan each scene's approach first, then provide the JSON mapping entryId -> scene text.`;
+Provide the JSON mapping entryId -> scene text.`;
 
-    const { data: sceneBatch } = await callModel(
-      {
-        stepName: 'generateProse',
-        systemPrompt: batchSystemPrompt,
-        userPrompt: batchUserPrompt,
-        modelConfig: input.modelConfig,
-        maxTokens: 4096,
-        temperature: 0.8,
-      },
-      (raw) => SceneBatchSchema.parse(raw),
-    );
-
-    Object.assign(allScenes, sceneBatch);
-  }
+  const { data: scenes } = await callModel(
+    {
+      stepName: 'generateProse',
+      systemPrompt: scenesSystemPrompt,
+      userPrompt: scenesUserPrompt,
+      modelConfig: input.modelConfig,
+      outputTokens: 8192,
+      thinkingTokens: 4096,
+    },
+    (raw) => SceneBatchSchema.parse(raw),
+  );
 
   return {
     ...state,
     title: intro.title,
     introduction: intro.introduction,
-    prose: allScenes,
+    prose: scenes,
   };
 };
 

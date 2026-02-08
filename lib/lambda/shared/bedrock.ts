@@ -4,7 +4,9 @@ import {
   type Message,
   type ContentBlock,
   type TokenUsage,
+  type InferenceConfiguration,
 } from '@aws-sdk/client-bedrock-runtime';
+import type { DocumentType } from '@smithy/types';
 import type { GenerationModelConfig, GenerationStep } from './generation-state';
 
 // ============================================
@@ -74,9 +76,19 @@ export interface CallModelOptions {
   userPrompt: string;
   /** Per-step model config (passed through the generation state) */
   modelConfig?: GenerationModelConfig;
-  /** Max tokens for the response. Defaults to 4096. */
-  maxTokens?: number;
-  /** Temperature. Defaults to 0.7 for creative generation. */
+  /**
+   * Max tokens for the JSON output. Defaults to 4096.
+   * This is the space reserved for the model's text response (the JSON payload).
+   * The actual `maxTokens` sent to the API = outputTokens + thinkingTokens.
+   */
+  outputTokens?: number;
+  /**
+   * Token budget for extended thinking (model's internal reasoning).
+   * Set to 0 to disable extended thinking. Defaults to 4096.
+   * Minimum when enabled is 1024 (Bedrock requirement).
+   */
+  thinkingTokens?: number;
+  /** Temperature. Defaults to 0.7 for creative generation. Ignored when thinking is enabled. */
   temperature?: number;
   /** Number of retry attempts for malformed JSON. Defaults to 2. */
   maxRetries?: number;
@@ -116,12 +128,15 @@ export async function callModel<T>(
     systemPrompt,
     userPrompt,
     modelConfig,
-    maxTokens = 4096,
+    outputTokens = 4096,
+    thinkingTokens = 4096,
     temperature = 0.7,
     maxRetries = 2,
   } = options;
 
   const modelId = resolveModelId(stepName, modelConfig);
+  const thinkingEnabled = thinkingTokens > 0;
+  const maxTokens = thinkingEnabled ? outputTokens + thinkingTokens : outputTokens;
 
   const messages: Message[] = [
     {
@@ -136,25 +151,59 @@ export async function callModel<T>(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const startMs = Date.now();
 
+    // Build inference config — temperature is incompatible with extended thinking
+    const inferenceConfig: InferenceConfiguration = { maxTokens };
+    if (!thinkingEnabled) {
+      inferenceConfig.temperature = temperature;
+    }
+
+    // Build additional model fields for extended thinking
+    const additionalModelRequestFields: DocumentType | undefined = thinkingEnabled
+      ? {
+          thinking: {
+            type: 'enabled',
+            budget_tokens: thinkingTokens,
+          },
+        }
+      : undefined;
+
     const command = new ConverseCommand({
       modelId,
       system: [{ text: systemPrompt }],
       messages,
-      inferenceConfig: {
-        maxTokens,
-        temperature,
-      },
+      inferenceConfig,
+      ...(additionalModelRequestFields ? { additionalModelRequestFields } : {}),
     });
 
     const response = await client.send(command);
     const latencyMs = Date.now() - startMs;
-
-    // Extract text from the response
-    rawText = extractText(response.output?.message?.content);
     const usage = response.usage;
 
-    // Split reasoning preamble from JSON
-    const { reasoning, jsonStr } = splitReasoningAndJson(rawText);
+    // Extract reasoning and text from the response content blocks
+    const { reasoning, text } = extractContent(response.output?.message?.content);
+    rawText = text;
+
+    // Determine the JSON string to parse:
+    // - If extended thinking is enabled, the text block should be pure JSON
+    //   (but fall back to splitReasoningAndJson just in case the model mixes them)
+    // - Otherwise, split the reasoning preamble from JSON the legacy way
+    let jsonStr: string;
+    let extractedReasoning: string;
+
+    if (thinkingEnabled && reasoning) {
+      // Thinking was separated by the API — text should be JSON
+      // Still run through split in case the model wrapped it in a fence
+      const split = splitReasoningAndJson(text);
+      jsonStr = split.jsonStr;
+      // Combine API-level reasoning with any inline reasoning (shouldn't happen, but be safe)
+      extractedReasoning = split.reasoning
+        ? `${reasoning}\n\n--- inline reasoning ---\n${split.reasoning}`
+        : reasoning;
+    } else {
+      const split = splitReasoningAndJson(text);
+      jsonStr = split.jsonStr;
+      extractedReasoning = split.reasoning;
+    }
 
     // Log the call details
     logCall({
@@ -164,15 +213,16 @@ export async function callModel<T>(
       maxAttempts: maxRetries + 1,
       latencyMs,
       usage,
-      reasoning,
-      rawText,
+      reasoning: extractedReasoning,
+      rawText: text,
+      thinkingEnabled,
     });
 
     // Try to parse JSON from the response
     try {
       const parsed = JSON.parse(jsonStr);
       const data = validate(parsed);
-      return { data, modelId, rawText, reasoning };
+      return { data, modelId, rawText: text, reasoning: extractedReasoning };
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
 
@@ -181,17 +231,20 @@ export async function callModel<T>(
       );
 
       if (attempt < maxRetries) {
-        // Add the model's failed response and a correction request
+        // Add the model's failed response and a correction request.
+        // The assistant text may be empty when thinking consumed the entire response —
+        // Bedrock rejects blank text fields, so fall back to a placeholder.
+        const assistantText = rawText.trim() || '[empty response]';
         messages.push(
           {
             role: 'assistant',
-            content: [{ text: rawText }],
+            content: [{ text: assistantText }],
           },
           {
             role: 'user',
             content: [
               {
-                text: `Your previous response was not valid JSON or failed validation. Error: ${lastError.message}\n\nPlease try again. Think through the fix briefly, then provide the corrected JSON.`,
+                text: `Your previous response was not valid JSON or failed validation. Error: ${lastError.message}\n\nPlease try again. Provide ONLY the corrected JSON with no other text.`,
               },
             ],
           },
@@ -219,10 +272,11 @@ interface LogCallParams {
   usage?: TokenUsage;
   reasoning: string;
   rawText: string;
+  thinkingEnabled: boolean;
 }
 
 function logCall(params: LogCallParams): void {
-  const { stepName, modelId, attempt, maxAttempts, latencyMs, usage, reasoning, rawText } = params;
+  const { stepName, modelId, attempt, maxAttempts, latencyMs, usage, reasoning, rawText, thinkingEnabled } = params;
 
   // Structured summary line
   console.log(
@@ -235,12 +289,13 @@ function logCall(params: LogCallParams): void {
       inputTokens: usage?.inputTokens ?? null,
       outputTokens: usage?.outputTokens ?? null,
       totalTokens: usage?.totalTokens ?? null,
+      thinkingEnabled,
     }),
   );
 
-  // Reasoning preamble (the interesting part — the model's creative thinking)
+  // Reasoning (from extended thinking API or from inline preamble)
   if (reasoning) {
-    console.log(`[${stepName}] --- Model reasoning ---`);
+    console.log(`[${stepName}] --- Model reasoning${thinkingEnabled ? ' (extended thinking)' : ''} ---`);
     console.log(reasoning);
     console.log(`[${stepName}] --- End reasoning ---`);
   }
@@ -261,52 +316,122 @@ function logCall(params: LogCallParams): void {
 // Helpers
 // ============================================
 
-/** Extract text content from Bedrock Converse response content blocks */
-function extractText(content?: ContentBlock[]): string {
-  if (!content) return '';
-  return content
-    .map((block) => {
-      if ('text' in block && typeof block.text === 'string') return block.text;
-      return '';
-    })
-    .join('');
+/**
+ * Extract reasoning and text content from Bedrock Converse response content blocks.
+ *
+ * When extended thinking is enabled, the response contains separate `reasoningContent`
+ * and `text` content blocks. When not enabled, everything comes as `text` blocks.
+ */
+function extractContent(content?: ContentBlock[]): { reasoning: string; text: string } {
+  if (!content) return { reasoning: '', text: '' };
+
+  const reasoningParts: string[] = [];
+  const textParts: string[] = [];
+
+  for (const block of content) {
+    if ('reasoningContent' in block && block.reasoningContent) {
+      // Extended thinking block
+      const rc = block.reasoningContent;
+      if ('reasoningText' in rc && rc.reasoningText?.text) {
+        reasoningParts.push(rc.reasoningText.text);
+      }
+      // redactedContent blocks are encrypted — nothing useful to extract
+    } else if ('text' in block && typeof block.text === 'string') {
+      textParts.push(block.text);
+    }
+  }
+
+  return {
+    reasoning: reasoningParts.join('\n'),
+    text: textParts.join(''),
+  };
 }
 
 /**
  * Split a model response into reasoning preamble and JSON content.
  *
- * The model is encouraged to think before producing JSON. This function
- * finds the JSON portion and returns everything before it as reasoning.
+ * This is the **fallback** path used when extended thinking is not enabled
+ * (or as a safety net when it is). When extended thinking is active the
+ * reasoning arrives in a separate API content block and the text block
+ * should be pure JSON — but we still run this just in case.
+ *
+ * Strategy:
+ *   1. Try the LAST markdown-fenced block that contains valid-looking JSON.
+ *   2. Fall back to the LAST top-level `{` or `[` that successfully parses.
+ *   3. If nothing works, return the whole text and let the caller's
+ *      JSON.parse produce a clear error.
  */
 function splitReasoningAndJson(text: string): { reasoning: string; jsonStr: string } {
-  // Try markdown-fenced JSON block — everything before the fence is reasoning
-  const fenceMatch = text.match(/^([\s\S]*?)```(?:json)?\s*\n?([\s\S]*?)```/);
-  if (fenceMatch) {
+  // 1. Try the LAST markdown-fenced JSON block whose content looks like JSON
+  const fenceRegex = /```(?:json)?\s*\n?([\s\S]*?)```/g;
+  let lastFenceMatch: { fullMatchIndex: number; content: string; beforeFence: string } | undefined;
+  let match: RegExpExecArray | null;
+
+  while ((match = fenceRegex.exec(text)) !== null) {
+    const candidate = match[1].trim();
+    if (looksLikeJson(candidate)) {
+      lastFenceMatch = {
+        fullMatchIndex: match.index,
+        content: candidate,
+        beforeFence: text.slice(0, match.index).trim(),
+      };
+    }
+  }
+
+  if (lastFenceMatch) {
     return {
-      reasoning: fenceMatch[1].trim(),
-      jsonStr: fenceMatch[2].trim(),
+      reasoning: lastFenceMatch.beforeFence,
+      jsonStr: lastFenceMatch.content,
     };
   }
 
-  // Try to find the first { or [ that starts the JSON
-  const objectStart = text.indexOf('{');
-  const arrayStart = text.indexOf('[');
+  // 2. Find the LAST { or [ that starts valid JSON
+  //    Walk backwards from the end to find a position that JSON.parse accepts.
+  const lastObject = text.lastIndexOf('{');
+  const lastArray = text.lastIndexOf('[');
+  // Try the later position first (the one closer to the end of the string)
+  const candidates = [lastObject, lastArray].filter((i) => i >= 0).sort((a, b) => b - a);
 
+  for (const pos of candidates) {
+    const slice = text.slice(pos).trim();
+    try {
+      JSON.parse(slice);
+      // It parsed — this is our JSON
+      return {
+        reasoning: text.slice(0, pos).trim(),
+        jsonStr: slice,
+      };
+    } catch {
+      // Not valid JSON from this position, try the other candidate
+    }
+  }
+
+  // 3. If parsing from the end failed, try the FIRST { or [ as a last resort
+  //    (covers the case where the JSON is truncated / the model ran out of tokens)
+  const firstObject = text.indexOf('{');
+  const firstArray = text.indexOf('[');
   let jsonStart = -1;
-  if (objectStart >= 0 && arrayStart >= 0) {
-    jsonStart = Math.min(objectStart, arrayStart);
-  } else if (objectStart >= 0) {
-    jsonStart = objectStart;
-  } else if (arrayStart >= 0) {
-    jsonStart = arrayStart;
+  if (firstObject >= 0 && firstArray >= 0) {
+    jsonStart = Math.min(firstObject, firstArray);
+  } else if (firstObject >= 0) {
+    jsonStart = firstObject;
+  } else if (firstArray >= 0) {
+    jsonStart = firstArray;
   }
 
-  if (jsonStart > 0) {
-    const reasoning = text.slice(0, jsonStart).trim();
-    const jsonStr = text.slice(jsonStart).trim();
-    return { reasoning, jsonStr };
+  if (jsonStart >= 0) {
+    return {
+      reasoning: text.slice(0, jsonStart).trim(),
+      jsonStr: text.slice(jsonStart).trim(),
+    };
   }
 
-  // No preamble found — the whole thing is (hopefully) JSON
+  // No JSON-like content found — return as-is (JSON.parse will fail with a clear error)
   return { reasoning: '', jsonStr: text.trim() };
+}
+
+/** True if the string looks like the start of a JSON object or array. */
+function looksLikeJson(s: string): boolean {
+  const t = s.trim();
+  return (t.startsWith('{') || t.startsWith('[')) && t.length > 1;
 }
