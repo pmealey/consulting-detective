@@ -9,6 +9,7 @@ import {
 } from '../storage/session.ts';
 import { CasebookList } from '../components/CasebookList.tsx';
 import { CasebookEntryView } from '../components/CasebookEntryView.tsx';
+import { FactsList } from '../components/FactsList.tsx';
 import { QuestionForm } from '../components/QuestionForm.tsx';
 import { ResultsView } from '../components/ResultsView.tsx';
 import type { Case, PlayerSession, PlayerAnswer, CaseResult } from '@shared/index';
@@ -20,6 +21,8 @@ const difficultyColors: Record<string, string> = {
   medium: 'bg-amber-100 text-amber-800',
   hard: 'bg-red-100 text-red-800',
 };
+
+const FACTS_VIEW_ID = '__facts__' as const;
 
 export function CasePage() {
   const { caseDate } = useParams<{ caseDate: string }>();
@@ -148,9 +151,11 @@ export function CasePage() {
 
   // Investigation
   if (phase === 'investigation') {
-    const selectedEntry = selectedEntryId
-      ? gameCase.casebook[selectedEntryId]
-      : null;
+    const isFactsView = selectedEntryId === FACTS_VIEW_ID;
+    const selectedEntry =
+      selectedEntryId && selectedEntryId !== FACTS_VIEW_ID
+        ? gameCase.casebook[selectedEntryId]
+        : null;
 
     return (
       <div className="fixed inset-x-0 top-0 bottom-6 flex flex-col overflow-hidden bg-stone-50">
@@ -165,21 +170,69 @@ export function CasePage() {
           {/* Sidebar: Casebook */}
           <div className="lg:col-span-4 flex flex-col min-h-0 gap-4">
             <div className="rounded-lg border border-stone-200 bg-white p-4 flex flex-col min-h-0 flex-1">
-              <button
-                onClick={() => { setSelectedEntryId(null); setNewVisitEntryId(null); }}
-                className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors shrink-0 ${
-                  selectedEntryId === null
-                    ? 'bg-stone-800 text-white'
-                    : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border border-stone-200'
-                }`}
-              >
-                Case Introduction
-              </button>
-              <div className="min-h-0 flex-1 overflow-y-auto mt-4">
+              <div className="space-y-1 mb-3">
+                <button
+                  onClick={() => { setSelectedEntryId(null); setNewVisitEntryId(null); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors shrink-0 ${
+                    selectedEntryId === null
+                      ? 'bg-stone-800 text-white'
+                      : 'bg-white text-stone-900 hover:bg-stone-50 border border-stone-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-stone-300" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-sm truncate">Case Introduction</div>
+                      <div className={`text-xs truncate ${selectedEntryId === null ? 'text-stone-300' : 'text-stone-500'}`}>
+                        Overview and setting
+                      </div>
+                    </div>
+                    <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                      selectedEntryId === null ? 'bg-stone-700 text-stone-300' : 'bg-stone-100 text-stone-600'
+                    }`}>
+                      Intro
+                    </span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setSelectedEntryId(FACTS_VIEW_ID); setNewVisitEntryId(null); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors shrink-0 ${
+                    isFactsView
+                      ? 'bg-stone-800 text-white'
+                      : (session?.discoveredFacts.length ?? 0) > 0
+                        ? 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                        : 'bg-white text-stone-900 hover:bg-stone-50 border border-stone-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
+                      (session?.discoveredFacts.length ?? 0) > 0 ? 'bg-green-500' : 'bg-stone-300'
+                    }`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-sm truncate">Facts</div>
+                      <div className={`text-xs truncate ${
+                        isFactsView ? 'text-stone-300' : 'text-stone-500'
+                      }`}>
+                        {(session?.discoveredFacts.length ?? 0) > 0
+                          ? `${session?.discoveredFacts.length ?? 0} discovered`
+                          : 'Discovered clues'}
+                      </div>
+                    </div>
+                    <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                      isFactsView ? 'bg-stone-700 text-stone-300' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      Facts
+                    </span>
+                  </div>
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
                 <CasebookList
                   entries={gameCase.casebook}
                   visitedEntryIds={session?.visitedEntries ?? []}
-                  selectedEntryId={selectedEntryId}
+                  selectedEntryId={
+                    selectedEntryId === FACTS_VIEW_ID ? null : selectedEntryId
+                  }
                   onSelectEntry={handleSelectEntry}
                 />
               </div>
@@ -193,7 +246,7 @@ export function CasePage() {
             </button>
           </div>
 
-          {/* Main content: Selected entry */}
+          {/* Main content: Selected entry or Facts */}
           <div className="lg:col-span-8 min-h-0 flex flex-col">
             {selectedEntry ? (
               <div className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto">
@@ -203,6 +256,15 @@ export function CasePage() {
                     characters={gameCase.characters}
                     facts={gameCase.facts}
                     isNewVisit={newVisitEntryId === selectedEntryId}
+                  />
+                </div>
+              </div>
+            ) : isFactsView ? (
+              <div className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto">
+                <div className="p-6">
+                  <FactsList
+                    facts={gameCase.facts}
+                    discoveredFactIds={session?.discoveredFacts ?? []}
                   />
                 </div>
               </div>
