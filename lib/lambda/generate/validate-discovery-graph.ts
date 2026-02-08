@@ -27,21 +27,39 @@ import type {
  * error context (up to 2 retries).
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { facts, casebook, introductionFactIds } = state;
+  const { events, characters, locations, facts, casebook, introductionFactIds } = state;
 
   if (!facts) throw new Error('Step 6b requires facts from step 5');
   if (!casebook) throw new Error('Step 6b requires casebook from step 6');
   if (!introductionFactIds) throw new Error('Step 6b requires introductionFactIds from step 5');
+  if (!locations) throw new Error('Step 6b requires locations from step 4');
+  if (!characters) throw new Error('Step 6b requires characters from step 3');
+  if (!events) throw new Error('Step 6b requires events from step 2');
 
   const allFactIds = new Set(Object.keys(facts));
   const allEntries = Object.values(casebook);
   const allEntryIds = new Set(Object.keys(casebook));
+  const allLocationIds = new Set(Object.keys(locations));
+  const allCharacterIds = new Set(Object.keys(characters));
 
   const errors: string[] = [];
+  const warnings: string[] = [];
 
-  // ---- Pre-checks: referential integrity of gate facts ----
+  // ---- Pre-checks: casebook entry referential integrity ----
   for (const entry of allEntries) {
-    for (const gateFactId of entry.requiresAnyFact) {
+    if (!allLocationIds.has(entry.locationId)) {
+      errors.push(
+        `Entry "${entry.entryId}": locationId "${entry.locationId}" is not a valid location`,
+      );
+    }
+    for (const charId of entry.characters) {
+      if (!allCharacterIds.has(charId)) {
+        errors.push(
+          `Entry "${entry.entryId}": characters references unknown character "${charId}"`,
+        );
+      }
+    }
+    for (const gateFactId of entry.requiresAnyFact ?? []) {
       if (!allFactIds.has(gateFactId)) {
         errors.push(
           `Entry "${entry.entryId}": requiresAnyFact references unknown fact "${gateFactId}"`,
@@ -65,11 +83,32 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     }
   }
 
+  // ---- Warnings: character knowledgeState and event reveals (fact refs) ----
+  for (const character of Object.values(characters)) {
+    for (const factId of Object.keys(character.knowledgeState)) {
+      if (!allFactIds.has(factId)) {
+        warnings.push(
+          `Character ${character.characterId}: knowledgeState references unknown fact "${factId}"`,
+        );
+      }
+    }
+  }
+  for (const event of Object.values(events)) {
+    for (const factId of event.reveals) {
+      if (!allFactIds.has(factId)) {
+        warnings.push(
+          `Event ${event.eventId}: reveals references unknown fact "${factId}"`,
+        );
+      }
+    }
+  }
+
   // If referential integrity is broken, bail early
   if (errors.length > 0) {
     const result: DiscoveryGraphResult = {
       valid: false,
       errors,
+      warnings,
       reachableFactIds: [],
       reachableEntryIds: [],
     };
@@ -145,6 +184,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   const result: DiscoveryGraphResult = {
     valid: errors.length === 0,
     errors,
+    warnings: warnings.length > 0 ? warnings : undefined,
     reachableFactIds: [...reachableFacts],
     reachableEntryIds: [...reachableEntries],
   };

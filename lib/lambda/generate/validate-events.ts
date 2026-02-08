@@ -1,0 +1,124 @@
+import type {
+  CaseGenerationState,
+  ValidationResult,
+  EventDraft,
+} from '../shared/generation-state';
+
+/**
+ * Pipeline Step 2b: Validate Events (after GenerateEvents)
+ *
+ * Pure logic — no LLM call. Validates event self-consistency only:
+ * - Every event.causes references an existing eventId
+ * - Every event's involvement map includes the agent with type "agent"
+ * - The causal graph (eventId -> causes) is acyclic
+ *
+ * Does not validate agent/location against characters/locations (those are
+ * still role/location placeholders at this stage).
+ */
+export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
+  const { events } = state;
+
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!events || Object.keys(events).length === 0) {
+    errors.push('No events in state');
+    return {
+      ...state,
+      eventValidationResult: { valid: false, errors, warnings },
+    };
+  }
+
+  const eventIds = new Set(Object.keys(events));
+
+  for (const event of Object.values(events)) {
+    for (const causedId of event.causes) {
+      if (!eventIds.has(causedId)) {
+        errors.push(
+          `Event ${event.eventId}: causes references unknown event "${causedId}"`,
+        );
+      }
+    }
+    if (event.agent === undefined || event.agent === '') {
+      errors.push(`Event ${event.eventId}: agent is missing`);
+    } else if (event.involvement[event.agent] !== 'agent') {
+      errors.push(
+        `Event ${event.eventId}: agent "${event.agent}" must be listed in involvement with type "agent"`,
+      );
+    }
+  }
+
+  if (errors.length > 0) {
+    return {
+      ...state,
+      eventValidationResult: { valid: false, errors, warnings },
+    };
+  }
+
+  const dagValid = isCausalDagAcyclic(events, eventIds);
+  if (!dagValid.acyclic) {
+    errors.push(...dagValid.cycleErrors);
+    return {
+      ...state,
+      eventValidationResult: { valid: false, errors, warnings },
+    };
+  }
+
+  return {
+    ...state,
+    eventValidationResult: { valid: true, errors: [], warnings },
+  };
+};
+
+/**
+ * Builds the causal graph (from eventId -> caused eventIds) and checks acyclicity
+ * using Kahn's algorithm (topological sort). Returns errors describing any cycle.
+ */
+function isCausalDagAcyclic(
+  events: Record<string, EventDraft>,
+  eventIds: Set<string>,
+): { acyclic: boolean; cycleErrors: string[] } {
+  const outEdges = new Map<string, string[]>();
+  const inDegree = new Map<string, number>();
+
+  for (const id of eventIds) {
+    inDegree.set(id, 0);
+    outEdges.set(id, []);
+  }
+
+  for (const event of Object.values(events)) {
+    const from = event.eventId;
+    for (const to of event.causes) {
+      if (!eventIds.has(to)) continue;
+      outEdges.get(from)!.push(to);
+      inDegree.set(to, (inDegree.get(to) ?? 0) + 1);
+    }
+  }
+
+  const queue: string[] = [];
+  for (const [id, d] of inDegree) {
+    if (d === 0) queue.push(id);
+  }
+
+  const order: string[] = [];
+  while (queue.length > 0) {
+    const n = queue.shift()!;
+    order.push(n);
+    for (const m of outEdges.get(n) ?? []) {
+      const newDeg = (inDegree.get(m) ?? 0) - 1;
+      inDegree.set(m, newDeg);
+      if (newDeg === 0) queue.push(m);
+    }
+  }
+
+  if (order.length === eventIds.size) {
+    return { acyclic: true, cycleErrors: [] };
+  }
+
+  const inCycle = new Set(eventIds);
+  for (const id of order) inCycle.delete(id);
+  const cycleErrors = [
+    `Causal graph has a cycle involving: ${[...inCycle].join(', ')}`,
+  ];
+  return { acyclic: false, cycleErrors };
+}

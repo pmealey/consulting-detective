@@ -61,6 +61,7 @@ Guidelines:
 - INVOLVEMENT DENSITY: Most events should involve 3+ characters (the agent plus at least 2 others as participants, witnesses, or bystanders). This is critical — multiple sources of information per fact make the mystery investigable from different angles.
 - Only 1-2 key events (e.g. a secret act of sabotage, a solitary theft) should have just the agent or agent + one other. If an event happens in a public or semi-public place, think about who else was nearby.`;
 
+  const eventValidationResult = state.eventValidationResult;
   const userPrompt = `Here is the case template to work from:
 
 Crime Type: ${template.crimeType}
@@ -74,7 +75,17 @@ ${template.eventSlots.map((s) => `  - ${s.slotId}: ${s.description} (${s.necessi
 Character Roles:
 ${template.characterRoles.map((r) => `  - ${r.roleId}: ${r.role} — ${r.description}`).join('\n')}
 
-Generate the full event chain. Think through the causal logic first, then provide the JSON object keyed by eventId.`;
+Generate the full event chain. Think through the causal logic first, then provide the JSON object keyed by eventId.${
+    eventValidationResult && !eventValidationResult.valid
+      ? `
+
+## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
+
+Your previous output failed validation. You MUST fix these errors:
+
+${eventValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
+      : ''
+  }`;
 
   const { data: events } = await callModel(
     {

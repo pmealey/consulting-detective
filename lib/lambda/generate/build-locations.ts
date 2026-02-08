@@ -47,6 +47,7 @@ Guidelines:
 - A location's visibleFrom should include places with direct sight lines (across a street, through a window).
 - Location names and descriptions should evoke the era: ${template.era}.`;
 
+  const locationValidationResult = state.locationValidationResult;
   const userPrompt = `Here is the case context:
 
 Title: ${template.title}
@@ -65,7 +66,17 @@ ${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.my
 Event Involvement Details:
 ${Object.values(events).map((e) => `  ${e.eventId}: ${JSON.stringify(e.involvement)}`).join('\n')}
 
-Create the full location graph. Every event location placeholder must map to a concrete location. Add additional locations for atmosphere. Think through the spatial relationships first, then provide the JSON.`;
+Create the full location graph. Every event location placeholder must map to a concrete location. Add additional locations for atmosphere. Think through the spatial relationships first, then provide the JSON.${
+    locationValidationResult && !locationValidationResult.valid
+      ? `
+
+## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
+
+Your previous output failed validation. You MUST fix these errors:
+
+${locationValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
+      : ''
+  }`;
 
   const { data: locations } = await callModel(
     {

@@ -72,12 +72,24 @@ export interface CaseGenerationState {
 
   // -- Step 2: Generate Events --
   events?: Record<string, EventDraft>;
+  /** Result of event validation (causes DAG, agent in involvement). */
+  eventValidationResult?: ValidationResult;
+  /** Number of times GenerateEvents has been retried after validation failure. */
+  generateEventsRetries?: number;
 
   // -- Step 3: Populate Characters --
   characters?: Record<string, CharacterDraft>;
+  /** Result of character/event cross-reference validation after PopulateCharacters. */
+  characterValidationResult?: ValidationResult;
+  /** Number of times PopulateCharacters has been retried after validation failure. */
+  populateCharactersRetries?: number;
 
   // -- Step 4: Build Locations --
   locations?: Record<string, LocationDraft>;
+  /** Result of location validation (event locations, accessibleFrom graph). */
+  locationValidationResult?: ValidationResult;
+  /** Number of times BuildLocations has been retried after validation failure. */
+  buildLocationsRetries?: number;
 
   // -- Step 5: Distribute Facts --
   facts?: Record<string, FactDraft>;
@@ -98,6 +110,10 @@ export interface CaseGenerationState {
 
   // -- Step 8: Create Questions --
   questions?: QuestionDraft[];
+  /** Result of question validation (answerFactIds exist, reachable, category match). */
+  questionValidationResult?: ValidationResult;
+  /** Number of times CreateQuestions has been retried after validation failure. */
+  createQuestionsRetries?: number;
 
   // -- Step 9: Compute Optimal Path --
   optimalPath?: string[];
@@ -212,6 +228,7 @@ export interface ValidationResult {
 export interface DiscoveryGraphResult {
   valid: boolean;
   errors: string[];
+  warnings?: string[];
   reachableFactIds: string[];
   reachableEntryIds: string[];
 }

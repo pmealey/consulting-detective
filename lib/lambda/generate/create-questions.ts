@@ -75,6 +75,7 @@ CRITICAL: "Who" questions MUST use \`answerCategory: "person"\` with person iden
 - Try to cover a variety of different facts and categories across questions. Don't make every question a "Who" question.
 - Point values: easy=5-10, medium=10-15, hard=15-20.`;
 
+  const questionValidationResult = state.questionValidationResult;
   const userPrompt = `Here is the case context:
 
 Title: ${template.title}
@@ -93,7 +94,17 @@ ${Object.values(facts).map((f) => `  - ${f.factId} [${f.category}]: ${f.descript
 Where facts are found (casebook entries):
 ${Object.values(casebook).map((e) => `  - ${e.label}: reveals [${e.revealsFactIds.join(', ')}]`).join('\n')}
 
-Design the quiz. Every entry in answerFactIds must be one of the factIds listed above, and answerCategory must match those facts' category. Think through the key deductions first, then provide the JSON array.`;
+Design the quiz. Every entry in answerFactIds must be one of the factIds listed above, and answerCategory must match those facts' category. Think through the key deductions first, then provide the JSON array.${
+    questionValidationResult && !questionValidationResult.valid
+      ? `
+
+## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
+
+Your previous output failed validation. You MUST fix these errors:
+
+${questionValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
+      : ''
+  }`;
 
   const { data: questions } = await callModel(
     {

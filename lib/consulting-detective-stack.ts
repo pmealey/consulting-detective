@@ -166,6 +166,34 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
     });
 
+    const validateEventsHandler = new nodejs.NodejsFunction(this, 'ValidateEventsHandler', {
+      entry: join(__dirname, 'lambda/generate/validate-events.ts'),
+      environment: lambdaEnvironment,
+      ...bundlingConfig,
+      timeout: cdk.Duration.seconds(30),
+    });
+
+    const validateCharactersHandler = new nodejs.NodejsFunction(this, 'ValidateCharactersHandler', {
+      entry: join(__dirname, 'lambda/generate/validate-characters.ts'),
+      environment: lambdaEnvironment,
+      ...bundlingConfig,
+      timeout: cdk.Duration.seconds(30),
+    });
+
+    const validateLocationsHandler = new nodejs.NodejsFunction(this, 'ValidateLocationsHandler', {
+      entry: join(__dirname, 'lambda/generate/validate-locations.ts'),
+      environment: lambdaEnvironment,
+      ...bundlingConfig,
+      timeout: cdk.Duration.seconds(30),
+    });
+
+    const validateQuestionsHandler = new nodejs.NodejsFunction(this, 'ValidateQuestionsHandler', {
+      entry: join(__dirname, 'lambda/generate/validate-questions.ts'),
+      environment: lambdaEnvironment,
+      ...bundlingConfig,
+      timeout: cdk.Duration.seconds(30),
+    });
+
     const validateCoherenceHandler = new nodejs.NodejsFunction(this, 'ValidateCoherenceHandler', {
       entry: join(__dirname, 'lambda/generate/validate-coherence.ts'),
       environment: lambdaEnvironment,
@@ -258,6 +286,26 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       outputPath: '$.Payload',
     });
 
+    const validateEvents = new tasks.LambdaInvoke(this, 'ValidateEvents', {
+      lambdaFunction: validateEventsHandler,
+      outputPath: '$.Payload',
+    });
+
+    const validateCharacters = new tasks.LambdaInvoke(this, 'ValidateCharacters', {
+      lambdaFunction: validateCharactersHandler,
+      outputPath: '$.Payload',
+    });
+
+    const validateLocations = new tasks.LambdaInvoke(this, 'ValidateLocations', {
+      lambdaFunction: validateLocationsHandler,
+      outputPath: '$.Payload',
+    });
+
+    const validateQuestions = new tasks.LambdaInvoke(this, 'ValidateQuestions', {
+      lambdaFunction: validateQuestionsHandler,
+      outputPath: '$.Payload',
+    });
+
     const generateProse = new tasks.LambdaInvoke(this, 'GenerateProse', {
       lambdaFunction: generateProseHandler,
       outputPath: '$.Payload',
@@ -282,6 +330,136 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       lambdaFunction: storeCaseHandler,
       outputPath: '$.Payload',
     });
+
+    // -- Events validation with retry loop --
+    const eventsValidationFailed = new sfn.Fail(this, 'EventsValidationFailed', {
+      cause: 'Event validation failed after maximum retries',
+      error: 'EventsInvalid',
+    });
+
+    const initEventsRetries = new sfn.Pass(this, 'InitEventsRetries', {
+      resultPath: '$.generateEventsRetries',
+      result: sfn.Result.fromNumber(0),
+    });
+
+    const incrementEventsRetries = new sfn.Pass(this, 'IncrementEventsRetries', {
+      parameters: {
+        'input.$': '$.input',
+        'template.$': '$.template',
+        'events.$': '$.events',
+        'eventValidationResult.$': '$.eventValidationResult',
+        'generateEventsRetries.$': sfn.JsonPath.mathAdd(
+          sfn.JsonPath.numberAt('$.generateEventsRetries'),
+          1,
+        ),
+      },
+    });
+
+    // Init states for next stages (defined early so Choice states can reference them)
+    const initCharsRetries = new sfn.Pass(this, 'InitCharsRetries', {
+      resultPath: '$.populateCharactersRetries',
+      result: sfn.Result.fromNumber(0),
+    });
+
+    const initLocsRetries = new sfn.Pass(this, 'InitLocsRetries', {
+      resultPath: '$.buildLocationsRetries',
+      result: sfn.Result.fromNumber(0),
+    });
+
+    const checkEvents = new sfn.Choice(this, 'CheckEvents')
+      .when(
+        sfn.Condition.booleanEquals('$.eventValidationResult.valid', true),
+        initCharsRetries,
+      )
+      .when(
+        sfn.Condition.numberGreaterThanEquals('$.generateEventsRetries', 2),
+        eventsValidationFailed,
+      )
+      .otherwise(incrementEventsRetries);
+
+    initEventsRetries.next(generateEvents);
+    incrementEventsRetries.next(generateEvents);
+    generateEvents.next(validateEvents);
+    validateEvents.next(checkEvents);
+    initCharsRetries.next(populateCharacters);
+
+    // -- Characters validation with retry loop --
+    const charactersValidationFailed = new sfn.Fail(this, 'CharactersValidationFailed', {
+      cause: 'Character validation failed after maximum retries',
+      error: 'CharactersInvalid',
+    });
+
+    const incrementCharsRetries = new sfn.Pass(this, 'IncrementCharsRetries', {
+      parameters: {
+        'input.$': '$.input',
+        'template.$': '$.template',
+        'events.$': '$.events',
+        'eventValidationResult.$': '$.eventValidationResult',
+        'generateEventsRetries.$': '$.generateEventsRetries',
+        'characters.$': '$.characters',
+        'characterValidationResult.$': '$.characterValidationResult',
+        'populateCharactersRetries.$': sfn.JsonPath.mathAdd(
+          sfn.JsonPath.numberAt('$.populateCharactersRetries'),
+          1,
+        ),
+      },
+    });
+
+    const checkCharacters = new sfn.Choice(this, 'CheckCharacters')
+      .when(
+        sfn.Condition.booleanEquals('$.characterValidationResult.valid', true),
+        initLocsRetries,
+      )
+      .when(
+        sfn.Condition.numberGreaterThanEquals('$.populateCharactersRetries', 2),
+        charactersValidationFailed,
+      )
+      .otherwise(incrementCharsRetries);
+
+    incrementCharsRetries.next(populateCharacters);
+    populateCharacters.next(validateCharacters);
+    validateCharacters.next(checkCharacters);
+    initLocsRetries.next(buildLocations);
+
+    // -- Locations validation with retry loop --
+    const locationsValidationFailed = new sfn.Fail(this, 'LocationsValidationFailed', {
+      cause: 'Location validation failed after maximum retries',
+      error: 'LocationsInvalid',
+    });
+
+    const incrementLocsRetries = new sfn.Pass(this, 'IncrementLocsRetries', {
+      parameters: {
+        'input.$': '$.input',
+        'template.$': '$.template',
+        'events.$': '$.events',
+        'eventValidationResult.$': '$.eventValidationResult',
+        'generateEventsRetries.$': '$.generateEventsRetries',
+        'characters.$': '$.characters',
+        'characterValidationResult.$': '$.characterValidationResult',
+        'populateCharactersRetries.$': '$.populateCharactersRetries',
+        'locations.$': '$.locations',
+        'locationValidationResult.$': '$.locationValidationResult',
+        'buildLocationsRetries.$': sfn.JsonPath.mathAdd(
+          sfn.JsonPath.numberAt('$.buildLocationsRetries'),
+          1,
+        ),
+      },
+    });
+
+    const checkLocations = new sfn.Choice(this, 'CheckLocations')
+      .when(
+        sfn.Condition.booleanEquals('$.locationValidationResult.valid', true),
+        distributeFacts,
+      )
+      .when(
+        sfn.Condition.numberGreaterThanEquals('$.buildLocationsRetries', 2),
+        locationsValidationFailed,
+      )
+      .otherwise(incrementLocsRetries);
+
+    incrementLocsRetries.next(buildLocations);
+    buildLocations.next(validateLocations);
+    validateLocations.next(checkLocations);
 
     // -- Discovery graph validation with retry loop --
     // After DesignCasebook, validate the bipartite discovery graph.
@@ -334,21 +512,68 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     designCasebook.next(validateDiscoveryGraph);
     validateDiscoveryGraph.next(checkDiscoveryGraph);
 
-    // Chain the steps into the pipeline with the retry loop
-    const pipelineDefinition = selectTemplate
-      .next(generateEvents)
-      .next(populateCharacters)
-      .next(buildLocations)
-      .next(distributeFacts)
-      .next(initRetries)
-      .next(designCasebook);
+    // Wire: DistributeFacts (valid from CheckLocations) → InitCasebookRetries → DesignCasebook
+    distributeFacts.next(initRetries);
+    initRetries.next(designCasebook);
 
-    // Continue after generateProse (already wired via the Choice state)
-    generateProse
-      .next(createQuestions)
-      .next(computeOptimalPath)
-      .next(validateCoherence)
-      .next(storeCase);
+    // -- Questions validation with retry loop --
+    const questionsValidationFailed = new sfn.Fail(this, 'QuestionsValidationFailed', {
+      cause: 'Question validation failed after maximum retries',
+      error: 'QuestionsInvalid',
+    });
+
+    const initQuestionsRetries = new sfn.Pass(this, 'InitQuestionsRetries', {
+      resultPath: '$.createQuestionsRetries',
+      result: sfn.Result.fromNumber(0),
+    });
+
+    const incrementQuestionsRetries = new sfn.Pass(this, 'IncrementQuestionsRetries', {
+      parameters: {
+        'input.$': '$.input',
+        'template.$': '$.template',
+        'events.$': '$.events',
+        'characters.$': '$.characters',
+        'locations.$': '$.locations',
+        'facts.$': '$.facts',
+        'introductionFactIds.$': '$.introductionFactIds',
+        'casebook.$': '$.casebook',
+        'discoveryGraphResult.$': '$.discoveryGraphResult',
+        'designCasebookRetries.$': '$.designCasebookRetries',
+        'prose.$': '$.prose',
+        'introduction.$': '$.introduction',
+        'title.$': '$.title',
+        'questions.$': '$.questions',
+        'questionValidationResult.$': '$.questionValidationResult',
+        'createQuestionsRetries.$': sfn.JsonPath.mathAdd(
+          sfn.JsonPath.numberAt('$.createQuestionsRetries'),
+          1,
+        ),
+      },
+    });
+
+    const checkQuestions = new sfn.Choice(this, 'CheckQuestions')
+      .when(
+        sfn.Condition.booleanEquals('$.questionValidationResult.valid', true),
+        computeOptimalPath,
+      )
+      .when(
+        sfn.Condition.numberGreaterThanEquals('$.createQuestionsRetries', 2),
+        questionsValidationFailed,
+      )
+      .otherwise(incrementQuestionsRetries);
+
+    incrementQuestionsRetries.next(createQuestions);
+    initQuestionsRetries.next(createQuestions);
+    createQuestions.next(validateQuestions);
+    validateQuestions.next(checkQuestions);
+    computeOptimalPath.next(validateCoherence);
+    validateCoherence.next(storeCase);
+
+    // Pipeline entry: SelectTemplate → InitEventsRetries → (GenerateEvents → ValidateEvents → CheckEvents)
+    const pipelineDefinition = selectTemplate.next(initEventsRetries);
+
+    // Continue after checkDiscoveryGraph (valid) → generateProse → InitQuestionsRetries → CreateQuestions → ...
+    generateProse.next(initQuestionsRetries);
 
     const generationStateMachine = new sfn.StateMachine(this, 'CaseGenerationPipeline', {
       stateMachineName: 'ConsultingDetective-CaseGeneration',

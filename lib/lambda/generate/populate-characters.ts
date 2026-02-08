@@ -68,6 +68,7 @@ Guidelines:
 - Set currentStatus only when it affects whether or how the character can be met during the investigation. Omit for characters with no such constraint.
 - societalRole must be their job or station in society (Landlady, Servant, Business partner, Inspector). Never put mystery labels (Victim, Witness, Suspect) in societalRole — those go in "mysteryRole" only.`;
 
+  const characterValidationResult = state.characterValidationResult;
   const userPrompt = `Here is the case context:
 
 Crime Type: ${template.crimeType}
@@ -86,7 +87,17 @@ ${Object.values(events).map((e) => `  ${e.eventId}: ${JSON.stringify(e.involveme
 Facts revealed by events:
 ${Object.values(events).map((e) => `  ${e.eventId} reveals: [${e.reveals.join(', ')}]`).join('\n')}
 
-Create the full character set with the roleMapping. Think through each character's personality and voice first, then provide the JSON.`;
+Create the full character set with the roleMapping. Think through each character's personality and voice first, then provide the JSON.${
+    characterValidationResult && !characterValidationResult.valid
+      ? `
+
+## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
+
+Your previous output failed validation. You MUST fix these errors:
+
+${characterValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
+      : ''
+  }`;
 
   const { data: result } = await callModel(
     {
