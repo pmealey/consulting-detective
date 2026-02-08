@@ -77,8 +77,58 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       }
     }
 
+    // If no entry directly satisfies a new question, fall back to the entry
+    // that unlocks the most *new* gated entries — this "bridge" step expands
+    // reachability so future iterations can reach answer-bearing entries.
     if (!bestEntry || bestNewlySatisfied === 0) {
-      break;
+      let bestBridgeEntry: CasebookEntryDraft | null = null;
+      let bestNewlyUnlocked = 0;
+      let bestBridgeFacts = 0;
+
+      for (const entry of entries) {
+        if (optimalPath.includes(entry.entryId)) continue;
+
+        if (
+          entry.requiresAnyFact &&
+          entry.requiresAnyFact.length > 0 &&
+          !entry.requiresAnyFact.some((fid) => discoveredFacts.has(fid))
+        ) {
+          continue;
+        }
+
+        // Count how many currently unreachable entries this would unlock
+        const wouldHaveFacts = new Set([...discoveredFacts, ...entry.revealsFactIds]);
+        let newlyUnlocked = 0;
+        for (const other of entries) {
+          if (optimalPath.includes(other.entryId) || other.entryId === entry.entryId) continue;
+          if (
+            other.requiresAnyFact &&
+            other.requiresAnyFact.length > 0 &&
+            !other.requiresAnyFact.some((fid) => discoveredFacts.has(fid)) &&
+            other.requiresAnyFact.some((fid) => wouldHaveFacts.has(fid))
+          ) {
+            newlyUnlocked++;
+          }
+        }
+
+        const newFactCount = entry.revealsFactIds.filter((fid) => !discoveredFacts.has(fid)).length;
+
+        if (
+          newlyUnlocked > bestNewlyUnlocked ||
+          (newlyUnlocked === bestNewlyUnlocked && newFactCount > bestBridgeFacts)
+        ) {
+          bestBridgeEntry = entry;
+          bestNewlyUnlocked = newlyUnlocked;
+          bestBridgeFacts = newFactCount;
+        }
+      }
+
+      // If no bridge entry can expand reachability either, we're truly stuck
+      if (!bestBridgeEntry || (bestNewlyUnlocked === 0 && bestBridgeFacts === 0)) {
+        break;
+      }
+
+      bestEntry = bestBridgeEntry;
     }
 
     optimalPath.push(bestEntry.entryId);
