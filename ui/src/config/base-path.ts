@@ -3,13 +3,18 @@
  * No configuration needed: works at any path and stays correct if you move the app.
  */
 function getBasePath(): string {
+  // Dev server: modules are under /src/..., not /assets/; always use root.
+  if (import.meta.env.DEV) return ''
+
   try {
     const pathname = new URL(import.meta.url).pathname
+    // Only derive from URL when we're in a built bundle under /assets/
+    if (!pathname.includes('/assets/')) return ''
+
     const segments = pathname.split('/').filter(Boolean)
-    // Bundle is at {base}/assets/<chunk>.js (or in dev, path may be /src/... → base '')
     if (segments.length >= 2) {
       segments.pop() // chunk filename
-      segments.pop() // "assets" or "src"
+      segments.pop() // "assets"
       const base = '/' + segments.join('/')
       return base || ''
     }
