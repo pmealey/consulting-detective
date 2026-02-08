@@ -1,11 +1,14 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import { Home } from './pages/Home.tsx'
 import { CasePage } from './pages/CasePage.tsx'
 
-function App() {
+function AppLayout() {
+  const location = useLocation()
+  const isCasePage = location.pathname.startsWith('/case/')
+
   return (
-    <BrowserRouter>
-      <div className="min-h-screen bg-stone-50 text-stone-900">
+    <div className="min-h-screen bg-stone-50 text-stone-900">
+      {!isCasePage && (
         <header className="border-b border-stone-200 bg-white">
           <div className="mx-auto max-w-6xl px-4 py-4">
             <Link to="/" className="hover:opacity-80 transition-opacity">
@@ -16,13 +19,21 @@ function App() {
             </Link>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 py-8">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/case/:caseDate" element={<CasePage />} />
-          </Routes>
-        </main>
-      </div>
+      )}
+      <main className={isCasePage ? '' : 'mx-auto max-w-6xl px-4 py-8'}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/case/:caseDate" element={<CasePage />} />
+        </Routes>
+      </main>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppLayout />
     </BrowserRouter>
   )
 }

@@ -9,12 +9,11 @@ import {
 } from '../storage/session.ts';
 import { CasebookList } from '../components/CasebookList.tsx';
 import { CasebookEntryView } from '../components/CasebookEntryView.tsx';
-import { FactsList } from '../components/FactsList.tsx';
 import { QuestionForm } from '../components/QuestionForm.tsx';
 import { ResultsView } from '../components/ResultsView.tsx';
 import type { Case, PlayerSession, PlayerAnswer, CaseResult } from '@shared/index';
 
-type Phase = 'loading' | 'introduction' | 'investigation' | 'questions' | 'results';
+type Phase = 'loading' | 'investigation' | 'questions' | 'results';
 
 const difficultyColors: Record<string, string> = {
   easy: 'bg-green-100 text-green-800',
@@ -52,15 +51,14 @@ export function CasePage() {
               // Already completed -- show results
               setResult(computeResult(existing, res.data));
               setPhase('results');
-            } else if (existing.visitedEntries.length > 0) {
-              // In progress -- resume investigation
-              setPhase('investigation');
             } else {
-              // Session exists but nothing visited -- show intro
-              setPhase('introduction');
+              // In progress or new -- go to investigation
+              setPhase('investigation');
             }
           } else {
-            setPhase('introduction');
+            // No session yet -- create one and go to investigation
+            setSession(createSession(caseDate));
+            setPhase('investigation');
           }
         } else {
           setError(res.error.message);
@@ -71,13 +69,6 @@ export function CasePage() {
         setError(err instanceof Error ? err.message : 'Failed to load case');
       });
   }, [caseDate]);
-
-  const handleBeginInvestigation = useCallback(() => {
-    if (!caseDate) return;
-    const newSession = session ?? createSession(caseDate);
-    setSession(newSession);
-    setPhase('investigation');
-  }, [caseDate, session]);
 
   const handleSelectEntry = useCallback(
     (entryId: string) => {
@@ -155,92 +146,28 @@ export function CasePage() {
     );
   }
 
-  // Phase 1: Introduction
-  if (phase === 'introduction') {
-    return (
-      <div className="space-y-8">
-        <Link to="/" className="text-sm text-stone-500 hover:text-stone-700">
-          &larr; Back to cases
-        </Link>
-
-        <div className="rounded-lg border border-stone-200 bg-white p-6 space-y-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-serif font-bold">{gameCase.title}</h1>
-            <span className={`text-xs px-2 py-0.5 rounded ${difficultyColors[gameCase.difficulty] ?? ''}`}>
-              {gameCase.difficulty}
-            </span>
-          </div>
-
-          <div className="flex gap-4 text-sm text-stone-500">
-            <span>{gameCase.setting.era}</span>
-            <span>&middot;</span>
-            <span>{gameCase.setting.date}</span>
-          </div>
-
-          <p className="text-sm text-stone-500 italic">
-            {gameCase.setting.atmosphere}
-          </p>
-        </div>
-
-        <div className="rounded-lg border border-stone-200 bg-white p-6">
-          <div className="space-y-4">
-            {gameCase.introduction.split('\n').filter(p => p.trim()).map((paragraph, i) => (
-              <p key={i} className="text-stone-700 leading-relaxed">
-                {paragraph}
-              </p>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-stone-200 bg-white p-6">
-          <h3 className="text-lg font-serif font-semibold mb-4">
-            Your Casebook
-          </h3>
-          <p className="text-sm text-stone-500 mb-4">
-            {Object.keys(gameCase.casebook).length} addresses are available to
-            investigate. Choose wisely -- visiting fewer locations while still
-            answering correctly earns a higher score.
-          </p>
-          <CasebookList
-            entries={gameCase.casebook}
-            visitedEntryIds={[]}
-            selectedEntryId={null}
-            onSelectEntry={() => {}}
-          />
-        </div>
-
-        <button
-          onClick={handleBeginInvestigation}
-          className="w-full py-3 rounded-lg bg-stone-800 text-white font-medium text-sm hover:bg-stone-900 transition-colors"
-        >
-          Begin Investigation
-        </button>
-      </div>
-    );
-  }
-
-  // Phase 2: Investigation
+  // Investigation
   if (phase === 'investigation') {
     const selectedEntry = selectedEntryId
       ? gameCase.casebook[selectedEntryId]
       : null;
 
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="fixed inset-x-0 top-0 bottom-6 flex flex-col overflow-hidden bg-stone-50">
+        <div className="flex items-center justify-between shrink-0 px-4 py-2 max-w-6xl w-full mx-auto">
           <Link to="/" className="text-sm text-stone-500 hover:text-stone-700">
             &larr; Back to cases
           </Link>
           <h1 className="text-lg font-serif font-semibold">{gameCase.title}</h1>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Sidebar: Casebook + Facts */}
-          <div className="lg:col-span-4 space-y-6">
-            <div className="rounded-lg border border-stone-200 bg-white p-4 space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 px-4 max-w-6xl w-full mx-auto">
+          {/* Sidebar: Casebook */}
+          <div className="lg:col-span-4 flex flex-col min-h-0 gap-4">
+            <div className="rounded-lg border border-stone-200 bg-white p-4 flex flex-col min-h-0 flex-1">
               <button
                 onClick={() => { setSelectedEntryId(null); setNewVisitEntryId(null); }}
-                className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors shrink-0 ${
                   selectedEntryId === null
                     ? 'bg-stone-800 text-white'
                     : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border border-stone-200'
@@ -248,60 +175,59 @@ export function CasePage() {
               >
                 Case Introduction
               </button>
-              <CasebookList
-                entries={gameCase.casebook}
-                visitedEntryIds={session?.visitedEntries ?? []}
-                selectedEntryId={selectedEntryId}
-                onSelectEntry={handleSelectEntry}
-              />
-            </div>
-
-            <div className="rounded-lg border border-stone-200 bg-white p-4">
-              <FactsList
-                facts={gameCase.facts}
-                discoveredFactIds={session?.discoveredFacts ?? []}
-              />
+              <div className="min-h-0 flex-1 overflow-y-auto mt-4">
+                <CasebookList
+                  entries={gameCase.casebook}
+                  visitedEntryIds={session?.visitedEntries ?? []}
+                  selectedEntryId={selectedEntryId}
+                  onSelectEntry={handleSelectEntry}
+                />
+              </div>
             </div>
 
             <button
               onClick={handleReadyToAnswer}
-              className="w-full py-2.5 rounded-lg bg-stone-800 text-white font-medium text-sm hover:bg-stone-900 transition-colors"
+              className="w-full py-2.5 rounded-lg bg-stone-800 text-white font-medium text-sm hover:bg-stone-900 transition-colors shrink-0"
             >
               Ready to Answer Questions
             </button>
           </div>
 
           {/* Main content: Selected entry */}
-          <div className="lg:col-span-8">
+          <div className="lg:col-span-8 min-h-0 flex flex-col">
             {selectedEntry ? (
-              <div className="rounded-lg border border-stone-200 bg-white p-6">
-                <CasebookEntryView
-                  entry={selectedEntry}
-                  characters={gameCase.characters}
-                  facts={gameCase.facts}
-                  isNewVisit={newVisitEntryId === selectedEntryId}
-                />
+              <div className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto">
+                <div className="p-6">
+                  <CasebookEntryView
+                    entry={selectedEntry}
+                    characters={gameCase.characters}
+                    facts={gameCase.facts}
+                    isNewVisit={newVisitEntryId === selectedEntryId}
+                  />
+                </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-stone-200 bg-white p-6 space-y-4">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h2 className="text-xl font-serif font-semibold">{gameCase.title}</h2>
-                  <span className={`text-xs px-2 py-0.5 rounded ${difficultyColors[gameCase.difficulty] ?? ''}`}>
-                    {gameCase.difficulty}
-                  </span>
-                </div>
-                <div className="flex gap-4 text-sm text-stone-500">
-                  <span>{gameCase.setting.era}</span>
-                  <span>&middot;</span>
-                  <span>{gameCase.setting.date}</span>
-                </div>
-                <p className="text-sm text-stone-500 italic">{gameCase.setting.atmosphere}</p>
-                <div className="border-t border-stone-200 pt-4 space-y-4">
-                  {gameCase.introduction.split('\n').filter(p => p.trim()).map((paragraph, i) => (
-                    <p key={i} className="text-stone-700 leading-relaxed">
-                      {paragraph}
-                    </p>
-                  ))}
+              <div className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto">
+                <div className="p-6 space-y-4">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h2 className="text-xl font-serif font-semibold">{gameCase.title}</h2>
+                    <span className={`text-xs px-2 py-0.5 rounded ${difficultyColors[gameCase.difficulty] ?? ''}`}>
+                      {gameCase.difficulty}
+                    </span>
+                  </div>
+                  <div className="flex gap-4 text-sm text-stone-500">
+                    <span>{gameCase.setting.era}</span>
+                    <span>&middot;</span>
+                    <span>{gameCase.setting.date}</span>
+                  </div>
+                  <p className="text-sm text-stone-500 italic">{gameCase.setting.atmosphere}</p>
+                  <div className="border-t border-stone-200 pt-4 space-y-4">
+                    {gameCase.introduction.split('\n').filter(p => p.trim()).map((paragraph, i) => (
+                      <p key={i} className="text-stone-700 leading-relaxed">
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
