@@ -214,9 +214,7 @@ export function CasePage() {
                   className={`w-full text-left px-3 py-2 rounded-md transition-colors shrink-0 ${
                     isFactsView
                       ? 'bg-stone-800 text-white'
-                      : (session?.discoveredFacts.length ?? 0) > 0
-                        ? 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                        : 'bg-white text-stone-900 hover:bg-stone-50 border border-stone-200'
+                      : 'bg-white text-stone-900 hover:bg-stone-50 border border-stone-200'
                   }`}
                 >
                   <div className="flex items-center gap-2">
