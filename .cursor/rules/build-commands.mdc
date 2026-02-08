@@ -1,0 +1,11 @@
+---
+description: Use npm scripts for build; do not run tsc directly
+alwaysApply: true
+---
+
+# Build Commands
+
+- **Backend (root):** Use `npm run build`. Do **not** run `npx tsc` or `tsc` with custom flags — the npm script uses the correct `tsconfig.json` and avoids path/option issues.
+- **Frontend (ui):** Use `npm run build --prefix ui` when building the UI from the repo root, or `npm run build` from inside `ui/`.
+
+When suggesting build or type-check steps, always use these npm scripts.

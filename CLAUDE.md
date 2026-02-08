@@ -48,10 +48,15 @@ The `the-moonstone-packet` project (sibling directory) extracts narrative struct
 
 ## Build and Deploy
 
+**Use `npm run build` to build the backend.** Do not run `npx tsc` (or `tsc`) directly — the npm script uses the correct tsconfig and avoids path/option issues.
+
 ```bash
 # Install dependencies
 npm install              # root (CDK + lambdas)
 npm install --prefix ui  # frontend
+
+# Build backend (TypeScript)
+npm run build            # compiles lib/ and lambdas via tsconfig.json
 
 # Local dev (frontend against deployed backend)
 npm run dev              # runs Vite dev server in ui/
