@@ -82,7 +82,7 @@ The story (chronological events):
 ${storyTimeline}
 
 Characters:
-${Object.values(characters).map((c) => `  - ${c.name} (${c.role})${c.currentStatus ? ` [current status: ${c.currentStatus}]` : ''}`).join('\n')}
+${Object.values(characters).map((c) => `  - ${c.name} (${c.mysteryRole}, ${c.societalRole})${c.currentStatus ? ` [current status: ${c.currentStatus}]` : ''}`).join('\n')}
 
 Write the introduction. Plan your approach first, then provide the JSON.`;
 
@@ -182,7 +182,7 @@ function buildEntryContext(
   return `Entry "${entry.entryId}" (${entry.label}, ${entry.address}):
   Location: ${location?.name ?? entry.locationId} — ${location?.description ?? ''}
   Type: ${entry.type}
-  Characters present: ${presentChars.map((c) => `${c.name} (${c.role}, tone: ${c.tone.register}, vocab: [${c.tone.vocabulary.join(', ')}]${c.tone.quirk ? `, quirk: ${c.tone.quirk}` : ''})`).join('; ') || 'none'}
+  Characters present: ${presentChars.map((c) => `${c.name} (${c.mysteryRole}, ${c.societalRole}, tone: ${c.tone.register}, vocab: [${c.tone.vocabulary.join(', ')}]${c.tone.quirk ? `, quirk: ${c.tone.quirk}` : ''})`).join('; ') || 'none'}
   Facts to reveal: ${revealedFacts.map((f) => `${f.factId}: "${f.description}"`).join('; ')}
   Character knowledge at this entry:
 ${presentChars.map((c) => {

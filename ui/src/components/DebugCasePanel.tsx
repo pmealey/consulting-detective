@@ -168,7 +168,8 @@ function CharacterRow({ character }: { character: Character }) {
       </button>
       {open && (
         <div className="p-3 pt-0 space-y-2 text-sm border-t border-stone-200">
-          <KeyValue label="role" value={character.role} />
+          <KeyValue label="societalRole" value={character.societalRole} />
+          <KeyValue label="mysteryRole" value={character.mysteryRole} />
           <KeyValue label="description" value={character.description} />
           {character.currentStatus != null && (
             <KeyValue label="currentStatus" value={character.currentStatus} />

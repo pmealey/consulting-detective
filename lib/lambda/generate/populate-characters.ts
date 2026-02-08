@@ -40,7 +40,8 @@ Each Character must match:
 {
   "characterId": string,           // e.g. "char_pemberton"
   "name": string,                  // full name, e.g. "Arthur Pemberton"
-  "role": string,                  // narrative role, e.g. "Victim's business partner"
+  "mysteryRole": string,           // narrative/mystery role (e.g. victim/suspect — used in prompts only)
+  "societalRole": string,          // occupation/station ONLY — e.g. "Landlady", "Business partner". This is shown to players. NEVER use Victim, Witness, Suspect here.
   "description": string,           // physical/personality sketch (2-3 sentences)
   "wants": string[],               // motivations (1-3 items)
   "hides": string[],               // factIds or free-text secrets they conceal
@@ -63,7 +64,8 @@ Guidelines:
 - Each character should have a distinctive tone that reflects their personality and social station.
 - Names should fit the era: ${template.era}.
 - Avoid stereotypes. Make characters feel like real people with contradictions.
-- Set currentStatus only when it affects whether or how the character can be met during the investigation (e.g. "deceased", "missing", "imprisoned", "traveling", "ill"). Omit for characters with no such constraint.`;
+- Set currentStatus only when it affects whether or how the character can be met during the investigation (e.g. "deceased", "missing", "imprisoned", "traveling", "ill"). Omit for characters with no such constraint.
+- societalRole must be their job or station in society (Landlady, Servant, Business partner, Inspector). Never put mystery labels (Victim, Witness, Suspect) in societalRole — those go in "mysteryRole" only.`;
 
   const userPrompt = `Here is the case context:
 

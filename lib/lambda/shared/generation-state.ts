@@ -149,7 +149,8 @@ export interface EventDraft {
 export interface CharacterDraft {
   characterId: string;
   name: string;
-  role: string;
+  mysteryRole: string;
+  societalRole: string;
   description: string;
   wants: string[];
   hides: string[];
@@ -260,7 +261,8 @@ export const EventsSchema = z.record(
 export const CharacterSchema = z.object({
   characterId: z.string().min(1),
   name: z.string().min(1),
-  role: z.string().min(1),
+  mysteryRole: z.string().min(1),
+  societalRole: z.string().min(1),
   description: z.string().min(1),
   wants: z.array(z.string()).min(1),
   hides: z.array(z.string()),

@@ -62,7 +62,7 @@ The story (what actually happened):
 ${Object.values(events).sort((a, b) => a.timestamp - b.timestamp).map((e) => `  ${e.timestamp}. ${e.description}`).join('\n')}
 
 Characters:
-${Object.values(characters).map((c) => `  - ${c.name} (${c.role}): wants=[${c.wants.join('; ')}], hides=[${c.hides.join('; ')}]`).join('\n')}
+${Object.values(characters).map((c) => `  - ${c.name} (${c.mysteryRole}, ${c.societalRole}): wants=[${c.wants.join('; ')}], hides=[${c.hides.join('; ')}]`).join('\n')}
 
 Critical facts (all must be covered by at least one question's requiredFacts):
 ${criticalFacts.map((f) => `  - ${f.factId}: ${f.description} [${f.category}]`).join('\n')}

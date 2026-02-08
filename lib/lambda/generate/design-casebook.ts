@@ -58,7 +58,7 @@ Setting: ${template.era}
 Difficulty: ${template.difficulty}
 
 Characters:
-${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.role}${c.currentStatus ? ` [current status: ${c.currentStatus}]` : ''}`).join('\n')}
+${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.mysteryRole}, ${c.societalRole}${c.currentStatus ? ` [current status: ${c.currentStatus}]` : ''}`).join('\n')}
 
 Locations:
 ${Object.values(locations).map((l) => `  - ${l.locationId} (${l.name}): ${l.type}`).join('\n')}

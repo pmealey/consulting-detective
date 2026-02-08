@@ -19,8 +19,17 @@ export interface Character {
   /** Display name, e.g. "Arthur Pemberton" */
   name: string;
 
-  /** Narrative role, e.g. "Victim's business partner", "Landlady" */
-  role: string;
+  /**
+   * Narrative/mystery role (e.g. victim, witness) — used in generation only.
+   * Not displayed in the game UI; use societalRole for that.
+   */
+  mysteryRole: string;
+
+  /**
+   * Role in society (occupation/station), e.g. "Landlady", "Business partner".
+   * This is the only role label shown to the player. Optional for backward compatibility.
+   */
+  societalRole: string;
 
   /** Brief physical/personality sketch for generation context */
   description: string;

@@ -49,7 +49,7 @@ export function CasebookEntryView({
               >
                 {char.name}
                 <span className="ml-1.5 text-xs text-amber-600">
-                  ({char.role})
+                  ({char.societalRole})
                 </span>
               </span>
             ))}

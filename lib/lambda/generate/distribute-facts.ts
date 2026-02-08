@@ -62,7 +62,7 @@ Events (chronological):
 ${Object.values(events).sort((a, b) => a.timestamp - b.timestamp).map((e) => `  - ${e.eventId}: ${e.description} (reveals: [${e.reveals.join(', ')}])`).join('\n')}
 
 Characters:
-${Object.values(characters).map((c) => `  - ${c.name} (${c.role}): wants=[${c.wants.join('; ')}], hides=[${c.hides.join('; ')}]`).join('\n')}
+${Object.values(characters).map((c) => `  - ${c.name} (${c.mysteryRole}, ${c.societalRole}): wants=[${c.wants.join('; ')}], hides=[${c.hides.join('; ')}]`).join('\n')}
 
 Key locations:
 ${Object.values(locations).map((l) => `  - ${l.name} (${l.type})`).join('\n')}

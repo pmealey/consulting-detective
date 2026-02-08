@@ -61,7 +61,7 @@ Events and where they happen:
 ${Object.values(events).sort((a, b) => a.timestamp - b.timestamp).map((e) => `  - ${e.eventId} at ${e.location}: ${e.description}`).join('\n')}
 
 Characters:
-${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.role}`).join('\n')}
+${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.mysteryRole}, ${c.societalRole}`).join('\n')}
 
 Create the full location graph. Every event location placeholder must map to a concrete location. Add additional locations for atmosphere. Think through the spatial relationships first, then provide the JSON.`;
 

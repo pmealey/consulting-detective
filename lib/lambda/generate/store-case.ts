@@ -57,7 +57,8 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     finalCharacters[id] = {
       characterId: draft.characterId,
       name: draft.name,
-      role: draft.role,
+      mysteryRole: draft.mysteryRole,
+      societalRole: draft.societalRole,
       description: draft.description,
       wants: draft.wants,
       hides: draft.hides,
