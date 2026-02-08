@@ -564,7 +564,7 @@ export function DebugCasePanel({ gameCase, onClose }: DebugCasePanelProps) {
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative w-full max-w-2xl h-full bg-white shadow-xl flex flex-col">
+      <div className="relative w-full max-w-4xl h-full bg-white shadow-xl flex flex-col">
         <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-stone-200">
           <h2 className="text-lg font-semibold text-stone-800">Case debug</h2>
           <button

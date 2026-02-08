@@ -80,7 +80,10 @@ export function CasebookList({
                     }`}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-sm truncate flex items-center gap-1.5 flex-wrap">
+                    <div
+                      className="font-medium text-sm break-words flex items-center gap-1.5 flex-wrap leading-snug"
+                      title={entry.label}
+                    >
                       {entry.label}
                       {isNewLead && !selected && (
                         <span className="inline-flex items-center gap-1.5 shrink-0 px-2 py-0.5 rounded-md text-xs font-semibold bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 shadow-sm ring-1 ring-amber-400/50">
@@ -90,9 +93,10 @@ export function CasebookList({
                       )}
                     </div>
                     <div
-                      className={`text-xs truncate ${
+                      className={`text-xs break-words line-clamp-2 ${
                         selected ? 'text-stone-300' : 'text-stone-500'
                       }`}
+                      title={entry.address}
                     >
                       {entry.address}
                     </div>
