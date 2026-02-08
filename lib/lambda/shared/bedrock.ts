@@ -17,6 +17,25 @@ const client = new BedrockRuntimeClient({});
 const DEFAULT_MODEL_ID = process.env.BEDROCK_DEFAULT_MODEL_ID ?? 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 // ============================================
+// Model Shortcuts (US inference profiles)
+// ============================================
+
+/** Short names -> full Bedrock inference profile IDs. Use these in execution input instead of full strings. */
+export const MODEL_SHORTCUTS: Record<string, string> = {
+  haiku: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+  sonnet: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+  sonnet4: 'us.anthropic.claude-sonnet-4-20250514-v1:0',
+  opus: 'us.anthropic.claude-opus-4-6-v1',
+  opus45: 'us.anthropic.claude-opus-4-5-20251101-v1:0',
+  opus41: 'us.anthropic.claude-opus-4-1-20250805-v1:0',
+};
+
+function expandModelId(idOrShortcut: string): string {
+  const lower = idOrShortcut.toLowerCase().trim();
+  return MODEL_SHORTCUTS[lower] ?? idOrShortcut;
+}
+
+// ============================================
 // Model Resolution
 // ============================================
 
@@ -28,14 +47,18 @@ const DEFAULT_MODEL_ID = process.env.BEDROCK_DEFAULT_MODEL_ID ?? 'us.anthropic.c
  *   2. modelConfig.default
  *   3. BEDROCK_DEFAULT_MODEL_ID env var
  *   4. Hard-coded fallback (Claude Haiku 4.5)
+ *
+ * Both full inference profile IDs and shortcuts (e.g. "haiku", "sonnet") are accepted.
  */
 export function resolveModelId(
   stepName: GenerationStep,
   modelConfig?: GenerationModelConfig,
 ): string {
-  return modelConfig?.steps?.[stepName]
+  const raw =
+    modelConfig?.steps?.[stepName]
     ?? modelConfig?.default
     ?? DEFAULT_MODEL_ID;
+  return expandModelId(raw);
 }
 
 // ============================================
