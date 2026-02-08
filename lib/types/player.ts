@@ -30,8 +30,8 @@ export interface PlayerAnswer {
   /** Which question this answers */
   questionId: string;
 
-  /** The player's answer text */
-  answer: string;
+  /** The factId the player selected as their answer */
+  answerFactId: string;
 }
 
 export interface CaseResult {

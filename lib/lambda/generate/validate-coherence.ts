@@ -9,8 +9,8 @@ import type {
  * Structural validation of the fully assembled case. Checks:
  * - Referential integrity (all IDs point to real objects)
  * - introductionFactIds and requiresAnyFact reference valid factIds
- * - Every question's requiredFacts are in the discovery-graph reachable set
- * - The optimal path is gate-feasible and covers all required facts
+ * - Every question's answerFactIds are in the discovery-graph reachable set and category matches
+ * - The optimal path is gate-feasible and covers all answer facts
  * - Character knowledge states are consistent with event involvement
  * - Location graph integrity (symmetric adjacency, valid parents)
  *
@@ -127,14 +127,14 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   const reachableFactIds = discoveryGraphResult?.reachableFactIds
     ? new Set(discoveryGraphResult.reachableFactIds)
     : null;
-  const questionRequiredFacts = new Set(questions.flatMap((q) => q.requiredFacts));
-
   for (const question of questions) {
-    for (const factId of question.requiredFacts) {
+    for (const factId of question.answerFactIds) {
       if (!factIds.has(factId)) {
-        errors.push(`Question ${question.questionId}: requiredFacts references unknown fact "${factId}"`);
+        errors.push(`Question ${question.questionId}: answerFactIds references unknown fact "${factId}"`);
       } else if (reachableFactIds && !reachableFactIds.has(factId)) {
-        errors.push(`Question ${question.questionId}: required fact "${factId}" is not reachable from introduction and casebook`);
+        errors.push(`Question ${question.questionId}: answer fact "${factId}" is not reachable from introduction and casebook`);
+      } else if (facts[factId] && facts[factId].category !== question.answerCategory) {
+        errors.push(`Question ${question.questionId}: answer fact "${factId}" category "${facts[factId].category}" does not match answerCategory "${question.answerCategory}"`);
       }
     }
   }
@@ -156,9 +156,10 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       optimalCoveredFacts.add(factId);
     }
   }
-  for (const factId of questionRequiredFacts) {
-    if (!optimalCoveredFacts.has(factId)) {
-      errors.push(`Optimal path does not cover required fact "${factId}"`);
+  for (const question of questions) {
+    const hasAnswerCovered = question.answerFactIds.some((fid) => optimalCoveredFacts.has(fid));
+    if (!hasAnswerCovered) {
+      errors.push(`Optimal path does not cover any answer fact for question "${question.questionId}"`);
     }
   }
 

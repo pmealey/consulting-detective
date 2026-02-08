@@ -442,7 +442,7 @@ function FactRow({
         </span>
         {requiredByQuestionCount > 0 && (
           <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
-            required by {requiredByQuestionCount} question{requiredByQuestionCount !== 1 ? 's' : ''}
+            answer for {requiredByQuestionCount} question{requiredByQuestionCount !== 1 ? 's' : ''}
           </span>
         )}
       </div>
@@ -455,10 +455,10 @@ function FactsSection({ gameCase }: { gameCase: Case }) {
   const facts = Object.values(gameCase.facts).sort((a, b) =>
     a.factId.localeCompare(b.factId),
   );
-  const requiredByCount: Record<string, number> = {};
+  const answerForCount: Record<string, number> = {};
   for (const q of gameCase.questions) {
-    for (const fid of q.requiredFacts ?? []) {
-      requiredByCount[fid] = (requiredByCount[fid] ?? 0) + 1;
+    for (const fid of q.answerFactIds ?? []) {
+      answerForCount[fid] = (answerForCount[fid] ?? 0) + 1;
     }
   }
   return (
@@ -470,7 +470,7 @@ function FactsSection({ gameCase }: { gameCase: Case }) {
           <FactRow
             key={f.factId}
             fact={f}
-            requiredByQuestionCount={requiredByCount[f.factId] ?? 0}
+            requiredByQuestionCount={answerForCount[f.factId] ?? 0}
           />
         ))
       )}
@@ -478,7 +478,7 @@ function FactsSection({ gameCase }: { gameCase: Case }) {
   );
 }
 
-function QuestionRow({ q }: { q: Question }) {
+function QuestionRow({ q, facts }: { q: Question; facts: Record<string, Fact> }) {
   return (
     <div className="border border-stone-200 rounded-lg p-3 text-sm space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -486,12 +486,27 @@ function QuestionRow({ q }: { q: Question }) {
         <span className="text-xs text-stone-500">{q.points} pts · {q.difficulty}</span>
       </div>
       <p className="font-medium text-stone-800">{q.text}</p>
-      <KeyValue label="answer" value={q.answer} />
-      <KeyValue
-        label="requiredFacts"
-        value={q.requiredFacts.length ? q.requiredFacts.join(', ') : '—'}
-        mono
-      />
+      <KeyValue label="answerCategory" value={q.answerCategory} mono />
+      <div>
+        <div className="text-stone-500 font-medium text-sm mb-1">answerFactIds</div>
+        <ul className="list-disc list-inside space-y-0.5 font-mono text-xs text-stone-600">
+          {(q.answerFactIds ?? []).length === 0 ? (
+            <li className="text-stone-400">—</li>
+          ) : (
+            q.answerFactIds!.map((fid) => {
+              const fact = facts[fid];
+              return (
+                <li key={fid}>
+                  <span className="text-stone-500">{fid}</span>
+                  {fact && (
+                    <span className="text-stone-600 ml-1">— {fact.description}</span>
+                  )}
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -503,7 +518,9 @@ function QuestionsSection({ gameCase }: { gameCase: Case }) {
       {questions.length === 0 ? (
         <p className="text-stone-500 text-sm">No questions.</p>
       ) : (
-        questions.map((q) => <QuestionRow key={q.questionId} q={q} />)
+        questions.map((q) => (
+          <QuestionRow key={q.questionId} q={q} facts={gameCase.facts} />
+        ))
       )}
     </div>
   );

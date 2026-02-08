@@ -199,8 +199,8 @@ export interface CasebookEntryDraft {
 export interface QuestionDraft {
   questionId: string;
   text: string;
-  answer: string;
-  requiredFacts: string[];
+  answerFactIds: string[];
+  answerCategory: string;
   points: number;
   difficulty: 'easy' | 'medium' | 'hard';
 }
@@ -354,13 +354,19 @@ export const IntroductionSchema = z.object({
 
 export const SceneBatchSchema = z.record(z.string(), z.string().min(10));
 
+const FactCategorySchema = z.enum([
+  'motive', 'means', 'opportunity', 'alibi',
+  'relationship', 'timeline', 'physical_evidence', 'background',
+  'person', 'place',
+]);
+
 export const QuestionsSchema = z
   .array(
     z.object({
       questionId: z.string().min(1),
       text: z.string().min(1),
-      answer: z.string().min(1),
-      requiredFacts: z.array(z.string()).min(1),
+      answerFactIds: z.array(z.string().min(1)).min(1),
+      answerCategory: FactCategorySchema,
       points: z.number().int().min(1),
       difficulty: z.enum(['easy', 'medium', 'hard']),
     }),

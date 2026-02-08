@@ -110,8 +110,8 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   const finalQuestions: Question[] = questions.map((draft) => ({
     questionId: draft.questionId,
     text: draft.text,
-    answer: draft.answer,
-    requiredFacts: draft.requiredFacts,
+    answerFactIds: draft.answerFactIds,
+    answerCategory: draft.answerCategory as FactCategory,
     points: draft.points,
     difficulty: draft.difficulty as Difficulty,
   }));

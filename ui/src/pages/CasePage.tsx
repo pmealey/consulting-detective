@@ -341,10 +341,14 @@ export function CasePage() {
                       gameCase={gameCase}
                       result={result}
                       playerAnswers={session.answers}
+                      visitedEntryIds={session.visitedEntries}
+                      facts={gameCase.facts}
                     />
                   ) : (
                     <QuestionForm
                       questions={gameCase.questions}
+                      facts={gameCase.facts}
+                      discoveredFactIds={session?.discoveredFacts ?? []}
                       onSubmit={handleSubmitAnswers}
                     />
                   )}

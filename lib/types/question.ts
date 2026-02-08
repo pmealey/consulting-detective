@@ -9,9 +9,11 @@
  * character or event models.
  *
  * Questions are ordered (presented sequentially) and carry point values.
+ * The player selects from discovered facts in the answer category.
  */
 
 import type { Difficulty } from './common';
+import type { FactCategory } from './fact';
 
 export interface Question {
   /** Unique identifier, e.g. "q_01_who" */
@@ -20,11 +22,11 @@ export interface Question {
   /** The question text, e.g. "Who murdered Mr. Pemberton?" */
   text: string;
 
-  /** The correct answer */
-  answer: string;
+  /** factIds that are acceptable correct answers (player must select one) */
+  answerFactIds: string[];
 
-  /** factIds the player needs to have discovered to deduce the answer */
-  requiredFacts: string[];
+  /** Category the player selects from (must match the fact's category) */
+  answerCategory: FactCategory;
 
   /** How many points this question is worth */
   points: number;

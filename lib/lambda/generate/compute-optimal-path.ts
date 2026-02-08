@@ -4,8 +4,9 @@ import type { CaseGenerationState, CasebookEntryDraft } from '../shared/generati
  * Pipeline Step 9: Compute Optimal Path
  *
  * Solves a gate-aware set-cover problem: find the minimum ordered set of
- * casebook entries that reveals all facts required by all questions, while
- * respecting entry gate constraints (`requiresAnyFact`).
+ * casebook entries such that for each question, at least one of its
+ * acceptable answer facts is revealed (shortest path to "easiest" answers),
+ * while respecting entry gate constraints (`requiresAnyFact`).
  *
  * At each step only entries whose gates are satisfied by the currently
  * discovered facts (intro facts + facts revealed by previously chosen
@@ -22,47 +23,34 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   if (!facts) throw new Error('Step 9 requires facts from step 5');
   if (!introductionFactIds) throw new Error('Step 9 requires introductionFactIds from step 5');
 
-  // Collect all facts required by all questions
-  const requiredFactIds = new Set<string>();
-  for (const question of questions) {
-    for (const factId of question.requiredFacts) {
-      requiredFactIds.add(factId);
-    }
-  }
-
   const entries = Object.values(casebook);
 
-  // Gate-aware greedy set-cover.
-  //
-  // `discoveredFacts` tracks every fact the player would have after reading
-  // the introduction and visiting all entries chosen so far. This includes
-  // facts that aren't required by any question — they still matter because
-  // they can serve as gate keys that unlock subsequent entries.
-  //
-  // `coveredFacts` tracks only the *required* facts that have been covered,
-  // used to determine when the algorithm is done.
+  // A question is "satisfied" when at least one of its answerFactIds is in discoveredFacts.
+  // We want the shortest path that satisfies all questions (one acceptable answer per question).
   const optimalPath: string[] = [];
   const discoveredFacts = new Set<string>(introductionFactIds);
-  const coveredFacts = new Set<string>();
+  const satisfiedQuestionIds = new Set<string>();
 
-  // Seed coveredFacts with any required facts already in the intro set
-  for (const fid of introductionFactIds) {
-    if (requiredFactIds.has(fid)) {
-      coveredFacts.add(fid);
+  const isQuestionSatisfied = (questionId: string, factsSet: Set<string>): boolean => {
+    const q = questions.find((x) => x.questionId === questionId);
+    return q ? q.answerFactIds.some((fid) => factsSet.has(fid)) : false;
+  };
+
+  // Seed satisfied questions from intro
+  for (const q of questions) {
+    if (isQuestionSatisfied(q.questionId, discoveredFacts)) {
+      satisfiedQuestionIds.add(q.questionId);
     }
   }
 
-  while (coveredFacts.size < requiredFactIds.size) {
+  while (satisfiedQuestionIds.size < questions.length) {
     let bestEntry: CasebookEntryDraft | null = null;
-    let bestNewCoverage = 0;
+    let bestNewlySatisfied = 0;
     let bestTotalFacts = 0;
 
     for (const entry of entries) {
-      // Skip entries already in the path
       if (optimalPath.includes(entry.entryId)) continue;
 
-      // Skip entries whose gate is not yet satisfied.
-      // An entry with an empty/absent requiresAnyFact is always accessible.
       if (
         entry.requiresAnyFact &&
         entry.requiresAnyFact.length > 0 &&
@@ -71,33 +59,35 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
         continue;
       }
 
-      // Count how many uncovered required facts this entry reveals
-      const newCoverage = entry.revealsFactIds.filter(
-        (fid) => requiredFactIds.has(fid) && !coveredFacts.has(fid),
-      ).length;
+      // How many currently unsatisfied questions would this entry satisfy?
+      const wouldHaveFacts = new Set([...discoveredFacts, ...entry.revealsFactIds]);
+      let newlySatisfied = 0;
+      for (const q of questions) {
+        if (satisfiedQuestionIds.has(q.questionId)) continue;
+        if (isQuestionSatisfied(q.questionId, wouldHaveFacts)) newlySatisfied++;
+      }
 
       if (
-        newCoverage > bestNewCoverage ||
-        (newCoverage === bestNewCoverage && entry.revealsFactIds.length > bestTotalFacts)
+        newlySatisfied > bestNewlySatisfied ||
+        (newlySatisfied === bestNewlySatisfied && entry.revealsFactIds.length > bestTotalFacts)
       ) {
         bestEntry = entry;
-        bestNewCoverage = newCoverage;
+        bestNewlySatisfied = newlySatisfied;
         bestTotalFacts = entry.revealsFactIds.length;
       }
     }
 
-    if (!bestEntry || bestNewCoverage === 0) {
-      // No reachable entry covers any remaining required facts.
-      // This will be caught by the validation step.
+    if (!bestEntry || bestNewlySatisfied === 0) {
       break;
     }
 
     optimalPath.push(bestEntry.entryId);
-    // Add ALL revealed facts to discovered set — any fact can be a gate key
     for (const fid of bestEntry.revealsFactIds) {
       discoveredFacts.add(fid);
-      if (requiredFactIds.has(fid)) {
-        coveredFacts.add(fid);
+    }
+    for (const q of questions) {
+      if (!satisfiedQuestionIds.has(q.questionId) && isQuestionSatisfied(q.questionId, discoveredFacts)) {
+        satisfiedQuestionIds.add(q.questionId);
       }
     }
   }

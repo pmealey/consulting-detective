@@ -54,13 +54,9 @@ export function createSession(
   return session;
 }
 
-/**
- * Case-insensitive, trimmed string comparison for answer checking.
- * Known limitation: the tabletop game uses human-evaluated answers.
- * This can be upgraded to fuzzy or LLM-based grading later.
- */
-function isCorrect(playerAnswer: string, correctAnswer: string): boolean {
-  return playerAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+/** True if the player's selected factId is one of the question's acceptable answers. */
+function isCorrect(playerFactId: string, correctFactIds: string[]): boolean {
+  return correctFactIds.includes(playerFactId);
 }
 
 const PENALTY_PER_EXTRA_VISIT = 5;
@@ -70,14 +66,14 @@ export function computeResult(session: PlayerSession, gameCase: Case): CaseResul
   let questionsCorrect = 0;
   for (const question of gameCase.questions) {
     const playerAnswer = session.answers.find(a => a.questionId === question.questionId);
-    if (playerAnswer && isCorrect(playerAnswer.answer, question.answer)) {
+    if (playerAnswer && isCorrect(playerAnswer.answerFactId, question.answerFactIds)) {
       questionsCorrect++;
     }
   }
 
   const questionsScore = gameCase.questions.reduce((sum, question) => {
     const playerAnswer = session.answers.find(a => a.questionId === question.questionId);
-    if (playerAnswer && isCorrect(playerAnswer.answer, question.answer)) {
+    if (playerAnswer && isCorrect(playerAnswer.answerFactId, question.answerFactIds)) {
       return sum + question.points;
     }
     return sum;

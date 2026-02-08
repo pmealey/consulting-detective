@@ -9,6 +9,8 @@ const categoryLabels: Record<FactCategory, string> = {
   timeline: 'Timeline',
   physical_evidence: 'Physical Evidence',
   background: 'Background',
+  person: 'Person',
+  place: 'Place',
 };
 
 const categoryOrder: FactCategory[] = [
@@ -20,6 +22,8 @@ const categoryOrder: FactCategory[] = [
   'timeline',
   'physical_evidence',
   'background',
+  'person',
+  'place',
 ];
 
 interface FactsListProps {
