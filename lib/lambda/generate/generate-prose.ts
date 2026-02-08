@@ -49,7 +49,8 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
 - Physical evidence facts should be woven into environmental descriptions.
 - Never tell the player the significance of what they've found — let them connect the dots.
 - The prose should reward careful reading without being obtuse.
-- Maintain the atmospheric tone: ${template.atmosphere}.`;
+- Maintain the atmospheric tone: ${template.atmosphere}.
+- Keep each character's current status in mind. Characters who cannot be met or interviewed (e.g. deceased, missing) must NOT appear as speaking or interactable.`;
 
   // ---- Call 1: Introduction and Title ----
 
@@ -81,7 +82,7 @@ The story (chronological events):
 ${storyTimeline}
 
 Characters:
-${Object.values(characters).map((c) => `  - ${c.name} (${c.role})`).join('\n')}
+${Object.values(characters).map((c) => `  - ${c.name} (${c.role})${c.currentStatus ? ` [current status: ${c.currentStatus}]` : ''}`).join('\n')}
 
 Write the introduction. Plan your approach first, then provide the JSON.`;
 

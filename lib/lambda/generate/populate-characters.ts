@@ -49,7 +49,8 @@ Each Character must match:
     "register": string,            // e.g. "formal", "nervous", "brusque"
     "vocabulary": string[],        // 3-5 characteristic words/phrases
     "quirk": string | undefined    // optional speech quirk
-  }
+  },
+  "currentStatus": string | undefined   // optional: status at investigation time, e.g. "deceased", "missing", "imprisoned", "traveling", "ill"
 }
 
 CRITICAL: The "roleMapping" must map EVERY roleId from the template to the characterId you create for it. This mapping is used to replace role placeholders in the event chain with real character IDs.
@@ -61,7 +62,8 @@ Guidelines:
 - Characters who hide something should have that reflected in both their "hides" array and their motivations.
 - Each character should have a distinctive tone that reflects their personality and social station.
 - Names should fit the era: ${template.era}.
-- Avoid stereotypes. Make characters feel like real people with contradictions.`;
+- Avoid stereotypes. Make characters feel like real people with contradictions.
+- Set currentStatus only when it affects whether or how the character can be met during the investigation (e.g. "deceased", "missing", "imprisoned", "traveling", "ill"). Omit for characters with no such constraint.`;
 
   const userPrompt = `Here is the case context:
 

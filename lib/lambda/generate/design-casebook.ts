@@ -48,7 +48,8 @@ CRITICAL RULES:
 5. Create 6-15 entries depending on difficulty.
 6. Entry types should vary: some location visits, some person interviews, some document examinations.
 7. locationId must reference an existing location. characters must reference existing characterIds.
-8. Addresses should be evocative and fit the era.`;
+8. Addresses should be evocative and fit the era.
+9. Keep each character's current status in mind (see character list). Only include in an entry's "characters" array those who can plausibly be present and interviewed there.`;
 
   const userPrompt = `Here is the case context:
 
@@ -57,7 +58,7 @@ Setting: ${template.era}
 Difficulty: ${template.difficulty}
 
 Characters:
-${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.role}`).join('\n')}
+${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.role}${c.currentStatus ? ` [current status: ${c.currentStatus}]` : ''}`).join('\n')}
 
 Locations:
 ${Object.values(locations).map((l) => `  - ${l.locationId} (${l.name}): ${l.type}`).join('\n')}

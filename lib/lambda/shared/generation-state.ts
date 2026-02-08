@@ -22,9 +22,13 @@ export type GenerationStep = typeof GENERATION_STEPS[number];
 // ============================================
 
 export interface GenerationModelConfig {
-  /** Fallback model ID for any step not listed in `steps` */
+  /**
+   * Fallback model for any step not listed in `steps`.
+   * Use full inference profile ID (e.g. us.anthropic.claude-haiku-4-5-20251001-v1:0)
+   * or a shortcut: haiku, sonnet, sonnet4, opus, opus45, opus41.
+   */
   default: string;
-  /** Per-step model ID overrides */
+  /** Per-step overrides; same format (full ID or shortcut). */
   steps?: Partial<Record<GenerationStep, string>>;
 }
 
@@ -155,6 +159,8 @@ export interface CharacterDraft {
     vocabulary: string[];
     quirk?: string;
   };
+  /** Freeform status at investigation time (e.g. "deceased", "missing", "imprisoned"); guides casebook/prose. */
+  currentStatus?: string;
 }
 
 export interface LocationDraft {
@@ -264,6 +270,7 @@ export const CharacterSchema = z.object({
     vocabulary: z.array(z.string()).min(1),
     quirk: z.string().optional(),
   }),
+  currentStatus: z.string().optional(),
 });
 
 export const CharactersSchema = z.record(z.string(), CharacterSchema);

@@ -19,6 +19,16 @@ Instead, guilt is emergent: a Question asks "Who murdered Mr. Pemberton?", its `
 
 ---
 
+## Character `currentStatus` (freeform)
+
+**Decision**: Characters have an optional freeform `currentStatus?: string` (e.g. "deceased", "missing", "imprisoned", "traveling") filled in during character/event generation and used by casebook and prose to decide who can be visited or interviewed.
+
+**Alternatives considered**: A binary `status: 'alive' | 'deceased'`; no tracking.
+
+**Rationale**: Many states affect availability: deceased (cannot be interviewed), missing, imprisoned (only at prison), traveling (might be elsewhere), ill (might be at home only). A single freeform field lets the event/character generation describe whatever fits the story; the casebook generator is instructed to "keep each character's currentStatus in mind" when deciding who appears at each entry, and the prose generator is instructed to respect status (e.g. not write dialogue for someone deceased or missing). Stored cases can omit `currentStatus` for backward compatibility.
+
+---
+
 ## Location vs. CasebookEntry Split
 
 **Decision**: The world model (`Location`) and the player-facing address book (`CasebookEntry`) are separate types.

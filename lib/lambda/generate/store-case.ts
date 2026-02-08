@@ -63,6 +63,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       hides: draft.hides,
       knowledgeState: draft.knowledgeState as Record<string, KnowledgeStatus>,
       tone: draft.tone,
+      currentStatus: draft.currentStatus,
     };
   }
 

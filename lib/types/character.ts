@@ -41,4 +41,11 @@ export interface Character {
 
   /** How this character speaks -- voice specification for scene generation */
   tone: ToneProfile;
+
+  /**
+   * Freeform status at investigation time (e.g. "deceased", "missing", "imprisoned", "traveling").
+   * Used by casebook and prose generation to decide who can be visited or interviewed and how.
+   * Optional; absent means no special constraint.
+   */
+  currentStatus?: string;
 }
