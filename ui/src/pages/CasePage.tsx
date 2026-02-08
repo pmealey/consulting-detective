@@ -11,11 +11,11 @@ import { CasebookList } from '../components/CasebookList.tsx';
 import { CasebookEntryView } from '../components/CasebookEntryView.tsx';
 import { FactsList } from '../components/FactsList.tsx';
 import { QuestionForm } from '../components/QuestionForm.tsx';
-import { ResultsView } from '../components/ResultsView.tsx';
+import { QuestionsAnsweredView } from '../components/QuestionsAnsweredView.tsx';
 import { DebugCasePanel } from '../components/DebugCasePanel.tsx';
 import type { Case, PlayerSession, PlayerAnswer, CaseResult } from '@shared/index';
 
-type Phase = 'loading' | 'investigation' | 'questions' | 'results';
+type Phase = 'loading' | 'investigation';
 
 const difficultyColors: Record<string, string> = {
   easy: 'bg-green-100 text-green-800',
@@ -24,6 +24,7 @@ const difficultyColors: Record<string, string> = {
 };
 
 const FACTS_VIEW_ID = '__facts__' as const;
+const QUESTIONS_VIEW_ID = '__questions__' as const;
 
 export function CasePage() {
   const { caseDate } = useParams<{ caseDate: string }>();
@@ -54,9 +55,10 @@ export function CasePage() {
           if (existing) {
             setSession(existing);
             if (existing.completedAt) {
-              // Already completed -- show results
+              // Already completed -- show investigation with answers in Questions card
               setResult(computeResult(existing, res.data));
-              setPhase('results');
+              setPhase('investigation');
+              setSelectedEntryId(QUESTIONS_VIEW_ID);
             } else {
               // In progress or new -- go to investigation
               setPhase('investigation');
@@ -102,15 +104,6 @@ export function CasePage() {
     [gameCase, session],
   );
 
-  const handleReadyToAnswer = useCallback(() => {
-    setPhase('questions');
-    setSelectedEntryId(null);
-  }, []);
-
-  const handleBackToCasebook = useCallback(() => {
-    setPhase('investigation');
-  }, []);
-
   const handleSubmitAnswers = useCallback(
     (answers: PlayerAnswer[]) => {
       if (!gameCase || !session) return;
@@ -125,7 +118,8 @@ export function CasePage() {
 
       const caseResult = computeResult(completed, gameCase);
       setResult(caseResult);
-      setPhase('results');
+      setPhase('investigation');
+      setSelectedEntryId(QUESTIONS_VIEW_ID);
     },
     [gameCase, session],
   );
@@ -155,8 +149,11 @@ export function CasePage() {
   // Investigation
   if (phase === 'investigation') {
     const isFactsView = selectedEntryId === FACTS_VIEW_ID;
+    const isQuestionsView = selectedEntryId === QUESTIONS_VIEW_ID;
     const selectedEntry =
-      selectedEntryId && selectedEntryId !== FACTS_VIEW_ID
+      selectedEntryId &&
+      selectedEntryId !== FACTS_VIEW_ID &&
+      selectedEntryId !== QUESTIONS_VIEW_ID
         ? gameCase.casebook[selectedEntryId]
         : null;
 
@@ -238,25 +235,45 @@ export function CasePage() {
                     </span>
                   </div>
                 </button>
+                <button
+                  onClick={() => { setSelectedEntryId(QUESTIONS_VIEW_ID); setNewVisitEntryId(null); }}
+                  className={`w-full text-left px-3 py-2 rounded-md transition-colors shrink-0 ${
+                    isQuestionsView
+                      ? 'bg-stone-800 text-white'
+                      : 'bg-white text-stone-900 hover:bg-stone-50 border border-stone-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-stone-300" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-sm truncate">Questions</div>
+                      <div className={`text-xs truncate ${
+                        isQuestionsView ? 'text-stone-300' : 'text-stone-500'
+                      }`}>
+                        Answer when ready
+                      </div>
+                    </div>
+                    <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                      isQuestionsView ? 'bg-stone-700 text-stone-300' : 'bg-stone-100 text-stone-600'
+                    }`}>
+                      Questions
+                    </span>
+                  </div>
+                </button>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <CasebookList
                   entries={gameCase.casebook}
                   visitedEntryIds={session?.visitedEntries ?? []}
                   selectedEntryId={
-                    selectedEntryId === FACTS_VIEW_ID ? null : selectedEntryId
+                    selectedEntryId === FACTS_VIEW_ID || selectedEntryId === QUESTIONS_VIEW_ID
+                      ? null
+                      : selectedEntryId
                   }
                   onSelectEntry={handleSelectEntry}
                 />
               </div>
             </div>
-
-            <button
-              onClick={handleReadyToAnswer}
-              className="w-full py-2.5 rounded-lg bg-stone-800 text-white font-medium text-sm hover:bg-stone-900 transition-colors shrink-0"
-            >
-              Ready to Answer Questions
-            </button>
           </div>
 
           {/* Main content: Selected entry or Facts */}
@@ -279,6 +296,23 @@ export function CasePage() {
                     facts={gameCase.facts}
                     discoveredFactIds={session?.discoveredFacts ?? []}
                   />
+                </div>
+              </div>
+            ) : isQuestionsView ? (
+              <div className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto">
+                <div className="p-6">
+                  {session && session.completedAt && result && session.answers?.length ? (
+                    <QuestionsAnsweredView
+                      gameCase={gameCase}
+                      result={result}
+                      playerAnswers={session.answers}
+                    />
+                  ) : (
+                    <QuestionForm
+                      questions={gameCase.questions}
+                      onSubmit={handleSubmitAnswers}
+                    />
+                  )}
                 </div>
               </div>
             ) : (
@@ -308,63 +342,6 @@ export function CasePage() {
             )}
           </div>
         </div>
-      </div>
-    );
-  }
-
-  // Phase 3: Questions
-  if (phase === 'questions') {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={handleBackToCasebook}
-            className="text-sm text-stone-500 hover:text-stone-700"
-          >
-            &larr; Back to casebook
-          </button>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setDebugOpen(true)}
-              className="text-sm text-stone-500 hover:text-stone-700 border border-stone-300 px-2 py-1 rounded"
-            >
-              Debug
-            </button>
-            <h1 className="text-lg font-serif font-semibold">{gameCase.title}</h1>
-          </div>
-        </div>
-        {debugOpen && (
-          <DebugCasePanel gameCase={gameCase} onClose={() => setDebugOpen(false)} />
-        )}
-
-        <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">
-          You visited {session?.visitedEntries.length ?? 0} entries and
-          discovered {session?.discoveredFacts.length ?? 0} facts.
-        </div>
-
-        <QuestionForm
-          questions={gameCase.questions}
-          onSubmit={handleSubmitAnswers}
-        />
-      </div>
-    );
-  }
-
-  // Phase 4: Results
-  if (phase === 'results' && result && session) {
-    return (
-      <div className="space-y-6">
-        <Link to="/" className="text-sm text-stone-500 hover:text-stone-700">
-          &larr; Back to cases
-        </Link>
-
-        <ResultsView
-          gameCase={gameCase}
-          result={result}
-          playerAnswers={session.answers}
-          visitedEntryIds={session.visitedEntries}
-        />
       </div>
     );
   }
