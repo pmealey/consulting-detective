@@ -26,6 +26,24 @@ const difficultyColors: Record<string, string> = {
 const FACTS_VIEW_ID = '__facts__' as const;
 const QUESTIONS_VIEW_ID = '__questions__' as const;
 
+const FACTS_ACK_KEY_PREFIX = 'cd-facts-ack-';
+
+function getFactsAcknowledged(caseDate: string): boolean {
+  try {
+    return localStorage.getItem(`${FACTS_ACK_KEY_PREFIX}${caseDate}`) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setFactsAcknowledged(caseDate: string): void {
+  try {
+    localStorage.setItem(`${FACTS_ACK_KEY_PREFIX}${caseDate}`, '1');
+  } catch {
+    // ignore
+  }
+}
+
 export function CasePage() {
   const { caseDate } = useParams<{ caseDate: string }>();
 
@@ -38,6 +56,16 @@ export function CasePage() {
 
   // Track which entries are newly visited this click (for showing revealed facts)
   const [newVisitEntryId, setNewVisitEntryId] = useState<string | null>(null);
+
+  // Whether user has acknowledged the facts spoiler warning (persisted per case)
+  const [factsAcknowledged, setFactsAcknowledgedState] = useState<boolean>(() =>
+    caseDate ? getFactsAcknowledged(caseDate) : false,
+  );
+
+  // Sync factsAcknowledged when caseDate changes (e.g. navigating to another case)
+  useEffect(() => {
+    if (caseDate) setFactsAcknowledgedState(getFactsAcknowledged(caseDate));
+  }, [caseDate]);
 
   const [debugOpen, setDebugOpen] = useState(false);
 
@@ -130,6 +158,23 @@ export function CasePage() {
     },
     [gameCase, session],
   );
+
+  const handleFactsClick = useCallback(() => {
+    if (factsAcknowledged) {
+      setSelectedEntryId(FACTS_VIEW_ID);
+      setNewVisitEntryId(null);
+      return;
+    }
+    const ok = window.confirm(
+      "Currently, facts may spoil the case. Are you sure you want to show the facts you've uncovered?",
+    );
+    if (ok && caseDate) {
+      setFactsAcknowledged(caseDate);
+      setFactsAcknowledgedState(true);
+      setSelectedEntryId(FACTS_VIEW_ID);
+      setNewVisitEntryId(null);
+    }
+  }, [factsAcknowledged, caseDate]);
 
   // Visible casebook entries: no gate, or gate satisfied by discovered facts
   // (Must be before any early returns to satisfy Rules of Hooks.)
@@ -242,7 +287,7 @@ export function CasePage() {
                   </div>
                 </button>
                 <button
-                  onClick={() => { setSelectedEntryId(FACTS_VIEW_ID); setNewVisitEntryId(null); }}
+                  onClick={handleFactsClick}
                   className={`w-full text-left px-3 py-2 rounded-md transition-colors shrink-0 ${
                     isFactsView
                       ? 'bg-stone-800 text-white'
@@ -322,6 +367,7 @@ export function CasePage() {
                     characters={gameCase.characters}
                     facts={gameCase.facts}
                     isNewVisit={newVisitEntryId === selectedEntryId}
+                    showNewFactsDiscovered={factsAcknowledged}
                   />
                 </div>
               </div>

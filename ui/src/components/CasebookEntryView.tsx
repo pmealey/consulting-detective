@@ -5,6 +5,8 @@ interface CasebookEntryViewProps {
   characters: Record<string, Character>;
   facts: Record<string, Fact>;
   isNewVisit: boolean;
+  /** When false, "New facts discovered" is hidden until user has acknowledged the facts spoiler warning. */
+  showNewFactsDiscovered?: boolean;
 }
 
 export function CasebookEntryView({
@@ -12,6 +14,7 @@ export function CasebookEntryView({
   characters,
   facts,
   isNewVisit,
+  showNewFactsDiscovered = false,
 }: CasebookEntryViewProps) {
   const presentCharacters = entry.characters
     .map((id) => characters[id])
@@ -57,7 +60,7 @@ export function CasebookEntryView({
         </div>
       )}
 
-      {isNewVisit && revealedFacts.length > 0 && (
+      {showNewFactsDiscovered && isNewVisit && revealedFacts.length > 0 && (
         <div className="border-t border-stone-200 pt-4">
           <h4 className="text-sm font-semibold text-emerald-700 mb-2">
             New facts discovered
