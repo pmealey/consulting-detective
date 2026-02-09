@@ -58,6 +58,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         forceDockerBundling: false,
         format: nodejs.OutputFormat.CJS,
       },
+      timeout: cdk.Duration.minutes(15),
     };
 
     // Health check handler
@@ -93,15 +94,14 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     // Longer timeout + more memory for LLM-calling steps
     const generationLambdaConfig = {
       ...bundlingConfig,
-      timeout: cdk.Duration.minutes(5),
-      memorySize: 512,
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 1024,
     };
 
     // Prose generation gets extra time and tokens
     const proseLambdaConfig = {
       ...generationLambdaConfig,
-      timeout: cdk.Duration.minutes(10),
-      memorySize: 1024,
+      memorySize: 2048,
     };
 
     const selectTemplateHandler = new nodejs.NodejsFunction(this, 'SelectTemplateHandler', {
@@ -155,57 +155,49 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     const computeOptimalPathHandler = new nodejs.NodejsFunction(this, 'ComputeOptimalPathHandler', {
       entry: join(__dirname, 'lambda/generate/compute-optimal-path.ts'),
       environment: lambdaEnvironment,
-      ...bundlingConfig,
-      timeout: cdk.Duration.minutes(15),
+      ...bundlingConfig
     });
 
     const validateDiscoveryGraphHandler = new nodejs.NodejsFunction(this, 'ValidateDiscoveryGraphHandler', {
       entry: join(__dirname, 'lambda/generate/validate-discovery-graph.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.minutes(15),
     });
 
     const validateEventsHandler = new nodejs.NodejsFunction(this, 'ValidateEventsHandler', {
       entry: join(__dirname, 'lambda/generate/validate-events.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.minutes(15),
     });
 
     const validateCharactersHandler = new nodejs.NodejsFunction(this, 'ValidateCharactersHandler', {
       entry: join(__dirname, 'lambda/generate/validate-characters.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.minutes(15),
     });
 
     const validateLocationsHandler = new nodejs.NodejsFunction(this, 'ValidateLocationsHandler', {
       entry: join(__dirname, 'lambda/generate/validate-locations.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.minutes(15),
     });
 
     const validateQuestionsHandler = new nodejs.NodejsFunction(this, 'ValidateQuestionsHandler', {
       entry: join(__dirname, 'lambda/generate/validate-questions.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.minutes(15),
     });
 
     const validateCoherenceHandler = new nodejs.NodejsFunction(this, 'ValidateCoherenceHandler', {
       entry: join(__dirname, 'lambda/generate/validate-coherence.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.minutes(15),
     });
 
     const storeCaseHandler = new nodejs.NodejsFunction(this, 'StoreCaseHandler', {
       entry: join(__dirname, 'lambda/generate/store-case.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
-      timeout: cdk.Duration.minutes(15),
     });
 
     // ============================================
@@ -577,8 +569,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
 
     const generationStateMachine = new sfn.StateMachine(this, 'CaseGenerationPipeline', {
       stateMachineName: 'ConsultingDetective-CaseGeneration',
-      definitionBody: sfn.DefinitionBody.fromChainable(pipelineDefinition),
-      timeout: cdk.Duration.minutes(30),
+      definitionBody: sfn.DefinitionBody.fromChainable(pipelineDefinition)
     });
 
     // ============================================
