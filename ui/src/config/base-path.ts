@@ -1,27 +1,19 @@
 /**
- * Base path derived from where the app bundle was loaded (e.g. .../consulting-detective/assets/index-xxx.js → /consulting-detective).
- * No configuration needed: works at any path and stays correct if you move the app.
+ * Router and API basename. Derived from the script URL so the same build works at
+ * root (dev, direct CF) and under /consulting-detective/ (nginx proxy).
  */
-function getBasePath(): string {
-  // Dev server: modules are under /src/..., not /assets/; always use root.
+function getBasename(): string {
   if (import.meta.env.DEV) return ''
-
   try {
     const pathname = new URL(import.meta.url).pathname
-    // Only derive from URL when we're in a built bundle under /assets/
     if (!pathname.includes('/assets/')) return ''
-
-    const segments = pathname.split('/').filter(Boolean)
-    if (segments.length >= 2) {
-      segments.pop() // chunk filename
-      segments.pop() // "assets"
-      const base = '/' + segments.join('/')
-      return base || ''
-    }
+    const parts = pathname.split('/').filter(Boolean)
+    parts.pop() // chunk filename
+    parts.pop() // "assets"
+    return parts.length > 0 ? '/' + parts.join('/') : ''
   } catch {
-    // fallback if URL parsing fails
+    return ''
   }
-  return ''
 }
 
-export const basename = getBasePath()
+export const basename = getBasename()
