@@ -189,20 +189,27 @@ export function CasePage() {
     );
   }, [gameCase?.casebook, session?.discoveredFacts]);
 
-  // Entry ids that just became visible due to the current visit (for "New lead!" indicator)
+  // Entry ids that just became visible due to the current visit (for "New lead!" indicator).
+  // Only entries that were NOT visible before this visit count as new leads.
   const newlyVisibleEntryIds = useMemo(() => {
     if (!newVisitEntryId || !gameCase || !session) return new Set<string>();
     const entry = gameCase.casebook[newVisitEntryId];
     if (!entry) return new Set<string>();
-    const revealedByVisit = new Set(entry.revealsFactIds);
+    const revealedByThisVisit = new Set(entry.revealsFactIds);
+    const discoveredBeforeThisVisit = new Set(
+      session.discoveredFacts.filter((fid) => !revealedByThisVisit.has(fid)),
+    );
+    const wasVisibleBefore = (e: CasebookEntry) => {
+      const gate = e.requiresAnyFact;
+      return !gate?.length || gate.some((fid) => discoveredBeforeThisVisit.has(fid));
+    };
     const result = new Set<string>();
     for (const [, e] of Object.entries(visibleEntries)) {
       if (e.entryId === newVisitEntryId) continue;
-      const gate = e.requiresAnyFact;
-      if (gate?.length && gate.some((fid) => revealedByVisit.has(fid))) result.add(e.entryId);
+      if (!wasVisibleBefore(e)) result.add(e.entryId);
     }
     return result;
-  }, [newVisitEntryId, gameCase?.casebook, visibleEntries]);
+  }, [newVisitEntryId, gameCase?.casebook, session?.discoveredFacts, visibleEntries]);
 
   // Loading / error states
   if (error) {
