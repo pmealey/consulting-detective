@@ -5,11 +5,16 @@ import type {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 6b: Validate Casebook
+ * Pipeline Step 8b: Validate Casebook
  *
  * Pure computation — no LLM call. Performs bipartite graph reachability
  * analysis (BFS) to verify that every fact and every casebook entry is
  * reachable starting from only the introduction facts.
+ *
+ * The programmatic phase of GenerateCasebook should guarantee structural
+ * correctness, but this step serves as a safety net — catching any issues
+ * introduced by the AI polish phase (e.g. invalid character references)
+ * or edge cases in the programmatic logic.
  *
  * The bipartite graph has two node types:
  *   - **Facts**: unlocked by the introduction or revealed by entries
@@ -17,11 +22,10 @@ import type {
  *
  * Algorithm:
  *   1. Seed reachable facts with `introductionFactIds`
- *   2. Seed reachable entries with always-visible entries (empty/absent `requiresAnyFact`)
- *   3. Iterate until fixed point:
- *      a. Reachable entries reveal new facts
- *      b. New facts unlock new entries (OR-gate)
- *   4. Report any unreachable facts or entries as errors
+ *   2. Iterate until fixed point:
+ *      a. Reachable facts unlock new entries (OR-gate)
+ *      b. Reachable entries reveal new facts
+ *   3. Report any unreachable facts or entries as errors
  *
  * If validation fails, the Step Function retries GenerateCasebook with
  * error context (up to 2 retries).
@@ -29,12 +33,12 @@ import type {
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
   const { events, characters, locations, facts, casebook, introductionFactIds } = state;
 
-  if (!facts) throw new Error('Step 6b requires facts from step 5');
-  if (!casebook) throw new Error('Step 6b requires casebook from step 6');
-  if (!introductionFactIds) throw new Error('Step 6b requires introductionFactIds from step 5');
-  if (!locations) throw new Error('Step 6b requires locations from step 4');
-  if (!characters) throw new Error('Step 6b requires characters from step 3');
-  if (!events) throw new Error('Step 6b requires events from step 2');
+  if (!facts) throw new Error('ValidateCasebook requires facts');
+  if (!casebook) throw new Error('ValidateCasebook requires casebook');
+  if (!introductionFactIds) throw new Error('ValidateCasebook requires introductionFactIds');
+  if (!locations) throw new Error('ValidateCasebook requires locations');
+  if (!characters) throw new Error('ValidateCasebook requires characters');
+  if (!events) throw new Error('ValidateCasebook requires events');
 
   const allFactIds = new Set(Object.keys(facts));
   const allEntries = Object.values(casebook);
@@ -45,7 +49,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // ---- Pre-checks: casebook entry referential integrity ----
+  // ── Referential integrity checks ─────────────────────────────────
   for (const entry of allEntries) {
     if (!allLocationIds.has(entry.locationId)) {
       errors.push(
@@ -59,7 +63,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
         );
       }
     }
-    for (const gateFactId of entry.requiresAnyFact ?? []) {
+    for (const gateFactId of entry.requiresAnyFact) {
       if (!allFactIds.has(gateFactId)) {
         errors.push(
           `Entry "${entry.entryId}": requiresAnyFact references unknown fact "${gateFactId}"`,
@@ -73,6 +77,13 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
         );
       }
     }
+
+    // Every entry must be gated (non-empty requiresAnyFact)
+    if (!entry.requiresAnyFact || entry.requiresAnyFact.length === 0) {
+      errors.push(
+        `Entry "${entry.entryId}": requiresAnyFact is empty — every entry must be gated`,
+      );
+    }
   }
 
   for (const introFactId of introductionFactIds) {
@@ -83,7 +94,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     }
   }
 
-  // ---- Warnings: character knowledgeState and event reveals (fact refs) ----
+  // ── Warnings: character knowledgeState and event reveals (fact refs) ──
   for (const character of Object.values(characters)) {
     for (const factId of Object.keys(character.knowledgeState)) {
       if (!allFactIds.has(factId)) {
@@ -94,10 +105,10 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     }
   }
   for (const event of Object.values(events)) {
-    for (const factId of event.reveals) {
-      if (!allFactIds.has(factId)) {
+    for (const reveal of event.reveals) {
+      if (!allFactIds.has(reveal.id)) {
         warnings.push(
-          `Event ${event.eventId}: reveals references unknown fact "${factId}"`,
+          `Event ${event.eventId}: reveals references unknown fact "${reveal.id}"`,
         );
       }
     }
@@ -115,20 +126,22 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     return { ...state, discoveryGraphResult: result };
   }
 
-  // ---- Bipartite BFS: facts ↔ entries ----
+  // ── Bipartite BFS: facts ↔ entries ───────────────────────────────
   const reachableFacts = new Set<string>(introductionFactIds);
   const reachableEntries = new Set<string>();
-
-  // Seed with always-visible entries (empty or absent requiresAnyFact)
-  for (const entry of allEntries) {
-    if (isAlwaysVisible(entry)) {
-      reachableEntries.add(entry.entryId);
-    }
-  }
 
   let changed = true;
   while (changed) {
     changed = false;
+
+    // Facts unlock entries (OR-gate: any one fact in requiresAnyFact)
+    for (const entry of allEntries) {
+      if (reachableEntries.has(entry.entryId)) continue;
+      if (entry.requiresAnyFact.some((factId) => reachableFacts.has(factId))) {
+        reachableEntries.add(entry.entryId);
+        changed = true;
+      }
+    }
 
     // Reachable entries reveal facts
     for (const entryId of reachableEntries) {
@@ -140,18 +153,9 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
         }
       }
     }
-
-    // Facts unlock entries (OR-gate: any one fact in requiresAnyFact)
-    for (const entry of allEntries) {
-      if (reachableEntries.has(entry.entryId)) continue;
-      if (entry.requiresAnyFact.some((factId) => reachableFacts.has(factId))) {
-        reachableEntries.add(entry.entryId);
-        changed = true;
-      }
-    }
   }
 
-  // ---- Check for unreachable facts ----
+  // ── Check for unreachable facts ──────────────────────────────────
   for (const factId of allFactIds) {
     if (!reachableFacts.has(factId)) {
       errors.push(
@@ -160,7 +164,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     }
   }
 
-  // ---- Check for unreachable entries ----
+  // ── Check for unreachable entries ────────────────────────────────
   for (const entryId of allEntryIds) {
     if (!reachableEntries.has(entryId)) {
       const entry = casebook[entryId];
@@ -171,11 +175,11 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     }
   }
 
-  // ---- Check that intro facts unlock at least some entries ----
+  // ── Check that intro facts unlock at least some entries ──────────
   const firstWaveEntries = allEntries.filter(
-    (e) => !isAlwaysVisible(e) && e.requiresAnyFact.some((f) => introductionFactIds.includes(f)),
+    (e) => e.requiresAnyFact.some((f) => introductionFactIds.includes(f)),
   );
-  if (firstWaveEntries.length === 0 && allEntries.every((e) => !isAlwaysVisible(e))) {
+  if (firstWaveEntries.length === 0) {
     errors.push(
       'No entries are unlocked by the introduction facts — the player has nowhere to go',
     );
@@ -194,8 +198,3 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     discoveryGraphResult: result,
   };
 };
-
-/** An entry is always visible if it has no gate (empty or absent requiresAnyFact). */
-function isAlwaysVisible(entry: CasebookEntryDraft): boolean {
-  return !entry.requiresAnyFact || entry.requiresAnyFact.length === 0;
-}

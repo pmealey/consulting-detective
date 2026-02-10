@@ -1,39 +1,59 @@
 import type { CaseGenerationState, CasebookEntryDraft } from '../shared/generation-state';
 
 /**
- * Pipeline Step 9: Compute Optimal Path
+ * Pipeline Step 11: Compute Optimal Path
  *
  * Solves a gate-aware set-cover problem: find the minimum ordered set of
  * casebook entries such that for each question, at least one of its
- * acceptable answer facts is revealed (shortest path to "easiest" answers),
+ * acceptable answers is discoverable (shortest path to "easiest" answers),
  * while respecting entry gate constraints (`requiresAnyFact`).
  *
- * At each step only entries whose gates are satisfied by the currently
- * discovered facts (intro facts + facts revealed by previously chosen
- * entries) are eligible. This ensures the resulting path is actually
- * walkable by a player who follows it in order.
+ * Answer types: 'fact' — acceptedId in discovered facts; 'person'/'location'
+ * — any discovered fact has a subject matching an acceptedId.
+ *
+ * Includes coherence checks (formerly ValidateCoherence): path entries exist,
+ * path is gate-feasible, and path covers all questions. Sets validationResult
+ * so StoreCase can proceed.
  *
  * This is pure computation — no LLM call needed.
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
   const { casebook, questions, facts, introductionFactIds } = state;
 
-  if (!casebook) throw new Error('Step 9 requires casebook from step 6');
-  if (!questions) throw new Error('Step 9 requires questions from step 8');
-  if (!facts) throw new Error('Step 9 requires facts from step 5');
-  if (!introductionFactIds) throw new Error('Step 9 requires introductionFactIds from step 5');
+  if (!casebook) throw new Error('ComputeOptimalPath requires casebook from step 8');
+  if (!questions) throw new Error('ComputeOptimalPath requires questions from step 10');
+  if (!facts) throw new Error('ComputeOptimalPath requires facts from step 6');
+  if (!introductionFactIds) throw new Error('ComputeOptimalPath requires introductionFactIds from step 7');
 
   const entries = Object.values(casebook);
 
-  // A question is "satisfied" when at least one of its answerFactIds is in discoveredFacts.
-  // We want the shortest path that satisfies all questions (one acceptable answer per question).
+  // A question is "satisfied" when at least one of its answer.acceptedIds is discoverable.
+  // For 'fact' answers: the acceptedId must be in discoveredFacts.
+  // For 'person'/'location' answers: any discoveredFact must have a subject matching an acceptedId.
+  // We want the shortest path that satisfies all questions.
   const optimalPath: string[] = [];
   const discoveredFacts = new Set<string>(introductionFactIds);
   const satisfiedQuestionIds = new Set<string>();
 
   const isQuestionSatisfied = (questionId: string, factsSet: Set<string>): boolean => {
     const q = questions.find((x) => x.questionId === questionId);
-    return q ? q.answerFactIds.some((fid) => factsSet.has(fid)) : false;
+    if (!q) return false;
+    switch (q.answer.type) {
+      case 'fact':
+        return q.answer.acceptedIds.some((id) => factsSet.has(id));
+      case 'person':
+      case 'location': {
+        // The question is satisfied when any discovered fact has a subject matching an acceptedId
+        const acceptedSet = new Set(q.answer.acceptedIds);
+        for (const fid of factsSet) {
+          const fact = facts[fid];
+          if (fact && fact.subjects.some((s) => acceptedSet.has(s))) return true;
+        }
+        return false;
+      }
+      default:
+        return false;
+    }
   };
 
   // Seed satisfied questions from intro
@@ -142,8 +162,36 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     }
   }
 
+  // Coherence checks (absorbed from ValidateCoherence)
+  const errors: string[] = [];
+  for (const entryId of optimalPath) {
+    if (!casebook[entryId]) {
+      errors.push(`Optimal path entry "${entryId}" is not in casebook`);
+    }
+  }
+  let walkFacts = new Set<string>(introductionFactIds);
+  for (const entryId of optimalPath) {
+    const entry = casebook[entryId];
+    if (!entry) continue;
+    if (entry.requiresAnyFact && entry.requiresAnyFact.length > 0) {
+      const gateSatisfied = entry.requiresAnyFact.some((fid) => walkFacts.has(fid));
+      if (!gateSatisfied) {
+        errors.push(`Entry "${entryId}" is gated on [${entry.requiresAnyFact.join(', ')}] but none are in intro or prior path`);
+      }
+    }
+    for (const fid of entry.revealsFactIds) walkFacts.add(fid);
+  }
+  if (satisfiedQuestionIds.size < questions.length) {
+    const missing = questions.filter((q) => !satisfiedQuestionIds.has(q.questionId)).map((q) => q.questionId);
+    errors.push(`Path does not cover questions: ${missing.join(', ')}`);
+  }
+  if (errors.length > 0) {
+    throw new Error(`Coherence check failed: ${errors.join('; ')}`);
+  }
+
   return {
     ...state,
     optimalPath,
+    validationResult: { valid: true, errors: [], warnings: [] },
   };
 };

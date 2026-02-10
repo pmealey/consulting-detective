@@ -8,11 +8,11 @@
  * During generation, events are created first as the backbone of the narrative.
  * Characters, locations, and facts are then populated around them.
  *
- * Each event tracks character involvement -- who performed it, who participated,
- * who witnessed it visually or auditorily, who found out later. This is the
- * authoritative record of each character's connection to each event. Character
- * positions can be derived from involvement: if a character isn't involved in
- * an event, their location at that time is narratively irrelevant.
+ * Each event tracks character involvement -- who performed it, who was present,
+ * who witnessed it visually or auditorily. This is the authoritative record of
+ * each character's connection to each event. Character positions can be derived
+ * from involvement: if a character isn't involved in an event, their location
+ * at that time is narratively irrelevant.
  */
 
 export interface CausalEvent {
@@ -45,11 +45,9 @@ export interface CausalEvent {
    *
    * During generation, involvement is determined by:
    * - 'agent': the character who performed the event
-   * - 'participant': directly involved but not the primary actor
-   * - 'witness_direct': was present and observed the event (generic)
-   * - 'witness_visual': was at a location in the event location's visibleFrom list
-   * - 'witness_auditory': was at a location in the event location's audibleFrom list
-   * - 'informed_after': learned about the event secondhand, after the fact
+   * - 'present': directly involved or present and observed the event
+   * - 'witness_visual': saw the event from another location (visibleFrom)
+   * - 'witness_auditory': heard the event from another location (audibleFrom)
    * - 'discovered_evidence': found physical evidence of the event later
    */
   involvement: Record<string, InvolvementType>;
@@ -60,17 +58,45 @@ export interface CausalEvent {
   /** eventIds that this event directly caused or enabled */
   causes: string[];
 
-  /** factIds that this event would reveal to a witness */
-  reveals: string[];
+  /**
+   * What this event reveals to witnesses. Each reveal describes a fact
+   * placeholder with perception channels (audible, visible, physical)
+   * that determine how different involvement types can learn it.
+   */
+  reveals: EventReveal[];
+}
+
+/**
+ * A single fact revealed by an event, with perception channels.
+ *
+ * The perception flags determine which involvement types can learn this fact:
+ * - agent/present always learn all reveals
+ * - witness_visual learns reveals where visible is true
+ * - witness_auditory learns reveals where audible is true
+ * - discovered_evidence learns reveals where physical is true
+ */
+export interface EventReveal {
+  /** factId placeholder, e.g. "fact_suspect_left_handed" */
+  id: string;
+
+  /** Learnable by hearing (auditory witnesses can learn this) */
+  audible: boolean;
+
+  /** Learnable by seeing (visual witnesses can learn this) */
+  visible: boolean;
+
+  /** Leaves physical evidence discoverable later */
+  physical: boolean;
+
+  /** roleId/locationId placeholders this fact is about */
+  subjects: string[];
 }
 
 export type InvolvementType =
   | 'agent'
-  | 'participant'
-  | 'witness_direct'
+  | 'present'
   | 'witness_visual'
   | 'witness_auditory'
-  | 'informed_after'
   | 'discovered_evidence';
 
 /**

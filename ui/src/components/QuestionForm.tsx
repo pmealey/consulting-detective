@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Question, PlayerAnswer, Fact } from '@shared/index';
+import type { Question, PlayerAnswer, Fact, Character, Location } from '@shared/index';
 
 const difficultyColors: Record<string, string> = {
   easy: 'bg-green-100 text-green-800',
@@ -7,37 +7,85 @@ const difficultyColors: Record<string, string> = {
   hard: 'bg-red-100 text-red-800',
 };
 
+interface AnswerOption {
+  id: string;
+  label: string;
+}
+
 interface QuestionFormProps {
   questions: Question[];
   facts: Record<string, Fact>;
+  characters: Record<string, Character>;
+  locations: Record<string, Location>;
   discoveredFactIds: string[];
+  discoveredSubjectIds: string[];
   onSubmit: (answers: PlayerAnswer[]) => void;
 }
 
 export function QuestionForm({
   questions,
   facts,
+  characters,
+  locations,
   discoveredFactIds,
+  discoveredSubjectIds,
   onSubmit,
 }: QuestionFormProps) {
   const [answers, setAnswers] = useState<Record<string, string>>(
     () => Object.fromEntries(questions.map((q) => [q.questionId, ''])),
   );
 
-  const handleChange = (questionId: string, factId: string) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: factId }));
+  const handleChange = (questionId: string, answerId: string) => {
+    setAnswers((prev) => ({ ...prev, [questionId]: answerId }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const playerAnswers: PlayerAnswer[] = questions.map((q) => ({
       questionId: q.questionId,
-      answerFactId: answers[q.questionId] ?? '',
+      answerId: answers[q.questionId] ?? '',
     }));
     onSubmit(playerAnswers);
   };
 
   const allAnswered = questions.every((q) => (answers[q.questionId] ?? '').length > 0);
+
+  /** Build the list of selectable options for a question based on its answer type. */
+  const getOptions = (question: Question): AnswerOption[] => {
+    switch (question.answer.type) {
+      case 'fact': {
+        return discoveredFactIds
+          .map((id) => facts[id])
+          .filter((f): f is Fact => Boolean(f) && f.category === question.answer.factCategory)
+          .map((f) => ({ id: f.factId, label: f.description }));
+      }
+      case 'person': {
+        return discoveredSubjectIds
+          .filter((id) => id in characters)
+          .map((id) => ({ id, label: characters[id].name }));
+      }
+      case 'location': {
+        return discoveredSubjectIds
+          .filter((id) => id in locations)
+          .map((id) => ({ id, label: locations[id].name }));
+      }
+      default:
+        return [];
+    }
+  };
+
+  const emptyMessage = (question: Question): string => {
+    switch (question.answer.type) {
+      case 'fact':
+        return `No ${question.answer.factCategory ?? ''} facts discovered yet. Visit more entries to uncover clues.`;
+      case 'person':
+        return 'No people discovered yet. Visit more entries to learn about suspects and witnesses.';
+      case 'location':
+        return 'No locations discovered yet. Visit more entries to learn about key places.';
+      default:
+        return 'No options available yet.';
+    }
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -49,9 +97,7 @@ export function QuestionForm({
       </div>
 
       {questions.map((question, index) => {
-        const options = discoveredFactIds
-          .map((id) => facts[id])
-          .filter((f): f is Fact => Boolean(f) && f.category === question.answerCategory);
+        const options = getOptions(question);
         const selected = answers[question.questionId] ?? '';
 
         return (
@@ -77,25 +123,25 @@ export function QuestionForm({
             </div>
             {options.length === 0 ? (
               <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                No {question.answerCategory} facts discovered yet. Visit more entries to uncover clues.
+                {emptyMessage(question)}
               </p>
             ) : (
               <div className="space-y-2">
                 <span className="text-xs text-stone-500 block">Select one:</span>
                 <ul className="space-y-1.5">
-                  {options.map((fact) => (
-                    <li key={fact.factId}>
+                  {options.map((option) => (
+                    <li key={option.id}>
                       <label className="flex items-start gap-2 cursor-pointer group">
                         <input
                           type="radio"
                           name={question.questionId}
-                          value={fact.factId}
-                          checked={selected === fact.factId}
-                          onChange={() => handleChange(question.questionId, fact.factId)}
+                          value={option.id}
+                          checked={selected === option.id}
+                          onChange={() => handleChange(question.questionId, option.id)}
                           className="mt-1.5 rounded-full border-stone-300 text-stone-700 focus:ring-stone-400"
                         />
                         <span className="text-sm text-stone-700 group-hover:text-stone-900">
-                          {fact.description}
+                          {option.label}
                         </span>
                       </label>
                     </li>

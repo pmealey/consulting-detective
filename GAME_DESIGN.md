@@ -39,7 +39,7 @@ The scale is flexible. An "easy" daily case might have 6 entries with 3 question
 
 ### 1. Read the Introduction
 
-The player opens the daily case and reads a short introduction setting the scene: a crime has been committed, a mystery has arisen. The introduction establishes the setting, the victim or situation, and the initial known facts. It does not reveal the solution.
+The player opens the daily case and reads a short introduction setting the scene: a crime has been committed, a mystery has arisen. The introduction establishes the setting, the victim or situation, and the initial known facts. It does not reveal the solution. The 2–4 facts that the introduction is built from are treated as **discovered** from the start: they seed the player's discovered facts and discovered subjects, so a few casebook entries become available immediately.
 
 ### 2. Investigate the Casebook
 
@@ -51,7 +51,13 @@ The player can visit entries in any order and as many or as few as they like. Ev
 
 ### 3. Answer the Questions
 
-After investigating, the player faces a series of questions: "Who did it?", "What was the motive?", "How did the murderer enter the building?", "Which witness is lying?" Each question requires connecting facts from multiple entries.
+After investigating, the player faces a series of questions: "Who did it?", "What was the motive?", "How did the murderer enter the building?", "Which witness is lying?" Each question has a structured answer:
+
+- **Person questions**: The player selects from **discovered character subjects** (people they've learned about by discovering facts that mention them). The correct answer is one of the accepted character IDs.
+- **Location questions**: The player selects from **discovered location subjects** (places they've learned about the same way). The correct answer is one of the accepted location IDs.
+- **Fact questions**: The player selects from their **discovered facts**, filtered by the question's fact category (e.g. motive, means, opportunity). The correct answer is one of the accepted fact IDs.
+
+The game tracks both **discovered facts** and **discovered subjects**. Visiting an entry (or reading the introduction) reveals facts; any character or location that appears in those facts' `subjects` is added to the player's discovered subjects. So the player builds a set of "people and places I know about" as well as "facts I've learned," and the quiz may ask for either.
 
 ### 4. Get Scored
 
@@ -80,3 +86,5 @@ A well-generated case has these qualities:
 **Distinct voices**: Each character should feel like a person, not an information dispenser. The nervous clerk, the evasive business partner, the matter-of-fact inspector -- tone and perspective make the scenes enjoyable to read even when they don't advance the investigation.
 
 **Emergent conclusions**: The game never tells you who the culprit is. The questions ask, and the player must deduce the answer from evidence. The narrative conclusions (guilt, motive, method) emerge from connecting facts, not from any single revelation.
+
+**False facts as discoverable items**: Some facts in the case are marked **false** (misinformation: alibis that aren't true, claims a character believes but that are wrong). False facts are still discoverable — the player may hear them in a scene and add them to their fact list. They are never correct answers: every question's accepted answers reference only true facts (or the real character/location IDs). Following a false lead can still unlock casebook entries (e.g. visiting someone who believes a falsehood might reveal a subject that gates another entry), so false facts add noise and red herrings without breaking fairness.

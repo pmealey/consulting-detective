@@ -38,22 +38,36 @@ Each event must match this schema:
   "involvement": Record<string, string>,  // roleId -> involvement type
   "necessity": "required" | undefined,
   "causes": string[],             // eventIds this event causes/enables
-  "reveals": string[]             // factId placeholders this event would reveal to witnesses (e.g. "fact_suspect_left_handed", "fact_cloth_scrap")
+  "reveals": EventReveal[]        // enriched fact reveals with perception channels
 }
 
-Involvement types: "agent", "participant", "witness_direct", "witness_visual", "witness_auditory", "informed_after", "discovered_evidence"
-- "witness_direct" is a generic witness who was present and observed the event.
+Each EventReveal must match:
+{
+  "id": string,                   // factId placeholder (e.g. "fact_suspect_left_handed")
+  "audible": boolean,             // learnable by hearing (auditory witnesses can learn this)
+  "visible": boolean,             // learnable by seeing (visual witnesses can learn this)
+  "physical": boolean,            // leaves physical evidence discoverable later
+  "subjects": string[]            // roleId/locationId placeholders this fact is about (at least 1)
+}
+
+Involvement types: "agent", "present", "witness_visual", "witness_auditory", "discovered_evidence"
+- "present" means the character was directly involved or present and observed the event.
 - "witness_visual" is a witness who saw the event happen from another location.
 - "witness_auditory" is a witness who heard the event happen from another location.
-- "informed_after" is a witness who learned about the event secondhand, after the fact.
-- "discovered_evidence" is a witness who found physical evidence of the event later.
+- "discovered_evidence" is a character who found physical evidence of the event later.
+
+How perception channels work:
+- agent/present always learn ALL reveals regardless of perception flags.
+- witness_visual learns reveals where "visible" is true.
+- witness_auditory learns reveals where "audible" is true.
+- discovered_evidence learns reveals where "physical" is true.
 
 Guidelines:
 - Create one event per template slot, using the slotId as the basis for eventId.
 - The agent in each event must reference a roleId from the template's characterRoles.
 - Every event must have at least the agent in its involvement map (with type "agent").
 - Timestamps should be sequential integers starting at 0.
-- Each event should reveal 1-3 facts (as placeholder factIds like "fact_suspect_left_handed", "fact_cloth_scrap").
+- Each event should reveal 1-3 facts as EventReveal objects. For each reveal, think about whether it's audible (could be overheard), visible (could be seen from afar), and/or physical (leaves evidence behind). Set the subjects to the roleIds and/or locationId placeholders the fact is about.
 - The causes array should reference other eventIds that this event leads to (forward edges in the DAG).
 - Ensure the causal DAG is acyclic and connected.
 - Location references should be descriptive placeholders (e.g. "loc_pub", "loc_victim_home") — they'll be fully defined in a later step.

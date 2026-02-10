@@ -42,6 +42,8 @@ Your response must end with valid JSON matching this schema:
   "era": string,             // e.g. "Victorian London, 1893", "New York City, 1921", "Aldrin Orbital Station, 2072"
   "date": string,            // in-world date, e.g. "14 March 1893", "November 10, 1921", "December 25, 2072"
   "atmosphere": string,      // atmospheric description, e.g. "A damp, fog-choked evening"
+  "mysteryStyle": string,    // structural shape of the mystery (see below)
+  "narrativeTone": string,   // narrative voice and mood (see below)
   "eventSlots": [            // 5-10 events forming the causal spine
     {
       "slotId": string,      // e.g. "E01_inciting_incident"
@@ -60,6 +62,29 @@ Your response must end with valid JSON matching this schema:
   "difficulty": "${difficulty}"
 }
 
+## Mystery Style
+
+The "mysteryStyle" describes the structural shape of the mystery — how the investigation unfolds. Choose one that fits the crime and difficulty:
+
+- "isolated": A closed circle of suspects in a contained setting (country house, ship, locked building). Few locations, tight relationships.
+- "sprawling": A wide investigation across many locations and social circles. The detective must traverse the city, connecting disparate threads.
+- "time-limited": Urgency drives the investigation — a deadline, a ticking clock, or a suspect about to flee. Events cluster tightly in time.
+- "layered": The surface crime conceals a deeper one. The initial investigation reveals that the real mystery is something else entirely.
+- "parallel": Two seemingly unrelated threads that converge. The detective must realize the connection.
+
+The mystery style guides how events are structured, how characters relate, and how the casebook will be laid out.
+
+## Narrative Tone
+
+The "narrativeTone" sets the voice and mood for all prose in the case. Choose one that complements the era and atmosphere:
+
+- "gothic": Brooding, atmospheric, with a sense of dread. Shadows, secrets, decaying grandeur.
+- "noir": Cynical, world-weary, morally ambiguous. Rain-slicked streets, betrayal, everyone has an angle.
+- "cozy": Warm, witty, with a puzzle-box quality. The crime is serious but the world is fundamentally decent.
+- "procedural": Clinical, methodical, focused on evidence and deduction. The detective is a professional doing a job.
+- "literary": Rich, character-driven prose. The mystery is a lens for exploring human nature.
+- "pulp": Fast-paced, vivid, with colorful characters and dramatic reveals. Entertainment over realism.
+
 Guidelines:
 - For "easy" difficulty: 5-6 events, 5-6 characters, straightforward motive
 - For "medium" difficulty: 6-8 events, 6-8 characters, one red herring thread
@@ -69,7 +94,8 @@ Guidelines:
 - Include roles for: at least one victim (or wronged party), at least one genuine suspect, and at least one red herring character.
 - Other roles can be things like witnesses, unreliable witnesses, bystanders, victim's husband or suspect's friend, victim's employee, etc.
 - The crime type should be specific, not generic. "Theft of shipping manifests to cover embezzlement" is better than "theft".
-- Every event must be something that HAPPENED in the world, not something the police/detective discovered or concluded.`;
+- Every event must be something that HAPPENED in the world, not something the police/detective discovered or concluded.
+- The mysteryStyle and narrativeTone should complement each other and the era. A Victorian murder might be "isolated" + "gothic"; a 1920s fraud case might be "sprawling" + "noir".`;
 
   const crimeHint = input.crimeType
     ? `The crime should involve or relate to: ${input.crimeType}.`

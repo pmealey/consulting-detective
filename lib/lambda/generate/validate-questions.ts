@@ -4,17 +4,19 @@ import type {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 8b: Validate Questions (after GenerateQuestions)
+ * Pipeline Step 10b: Validate Questions (after GenerateQuestions)
  *
  * Pure logic — no LLM call. Validates:
- * - Every question.answerFactIds references a valid factId
- * - Every answer fact is reachable (in discoveryGraphResult.reachableFactIds)
- * - Every answer fact's category matches question.answerCategory
+ * - Every question has a valid answer type ('person', 'location', or 'fact')
+ * - For 'fact' answers: factCategory is present, acceptedIds reference valid factIds,
+ *   answer facts are reachable, and their categories match factCategory
+ * - For 'person' answers: acceptedIds reference valid characterIds
+ * - For 'location' answers: acceptedIds reference valid locationIds
  *
- * On failure, the Step Function retries CreateQuestions.
+ * On failure, the Step Function retries GenerateQuestions.
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { questions, facts, discoveryGraphResult } = state;
+  const { questions, facts, characters, locations, discoveryGraphResult } = state;
 
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -28,7 +30,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   }
 
   if (!facts || Object.keys(facts).length === 0) {
-    errors.push('No facts in state; cannot validate question answerFactIds');
+    errors.push('No facts in state; cannot validate question answers');
     return {
       ...state,
       questionValidationResult: { valid: false, errors, warnings },
@@ -46,25 +48,79 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   }
 
   const factIds = new Set(Object.keys(facts));
+  const characterIds = new Set(characters ? Object.keys(characters) : []);
+  const locationIds = new Set(locations ? Object.keys(locations) : []);
   const reachableFactIds = new Set(discoveryGraphResult.reachableFactIds);
 
+  const validAnswerTypes = new Set(['person', 'location', 'fact']);
+
   for (const question of questions) {
-    for (const factId of question.answerFactIds) {
-      if (!factIds.has(factId)) {
-        errors.push(
-          `Question ${question.questionId}: answerFactIds references unknown fact "${factId}"`,
-        );
-      } else if (!reachableFactIds.has(factId)) {
-        errors.push(
-          `Question ${question.questionId}: answer fact "${factId}" is not reachable from introduction and casebook`,
-        );
-      } else {
-        const fact = facts[factId];
-        if (fact && fact.category !== question.answerCategory) {
+    const { answer } = question;
+
+    if (!answer || !validAnswerTypes.has(answer.type)) {
+      errors.push(
+        `Question ${question.questionId}: answer.type must be 'person', 'location', or 'fact' (got "${answer?.type}")`,
+      );
+      continue;
+    }
+
+    if (!answer.acceptedIds || answer.acceptedIds.length === 0) {
+      errors.push(
+        `Question ${question.questionId}: answer.acceptedIds must have at least one entry`,
+      );
+      continue;
+    }
+
+    switch (answer.type) {
+      case 'fact': {
+        if (!answer.factCategory) {
           errors.push(
-            `Question ${question.questionId}: answer fact "${factId}" category "${fact.category}" does not match answerCategory "${question.answerCategory}"`,
+            `Question ${question.questionId}: answer.factCategory is required when type is 'fact'`,
           );
         }
+        for (const id of answer.acceptedIds) {
+          if (!factIds.has(id)) {
+            errors.push(
+              `Question ${question.questionId}: answer.acceptedIds references unknown fact "${id}"`,
+            );
+          } else {
+            const fact = facts[id];
+            if (fact?.veracity === 'false') {
+              errors.push(
+                `Question ${question.questionId}: answer fact "${id}" has veracity "false"; only true facts may be accepted answers`,
+              );
+            } else if (!reachableFactIds.has(id)) {
+              errors.push(
+                `Question ${question.questionId}: answer fact "${id}" is not reachable from introduction and casebook`,
+              );
+            } else if (answer.factCategory && fact && fact.category !== answer.factCategory) {
+              errors.push(
+                `Question ${question.questionId}: answer fact "${id}" category "${fact.category}" does not match factCategory "${answer.factCategory}"`,
+              );
+            }
+          }
+        }
+        break;
+      }
+      case 'person': {
+        for (const id of answer.acceptedIds) {
+          if (!characterIds.has(id)) {
+            errors.push(
+              `Question ${question.questionId}: answer.acceptedIds references unknown character "${id}"`,
+            );
+          }
+        }
+        break;
+      }
+      case 'location': {
+        for (const id of answer.acceptedIds) {
+          if (!locationIds.has(id)) {
+            errors.push(
+              `Question ${question.questionId}: answer.acceptedIds references unknown location "${id}"`,
+            );
+          }
+        }
+        break;
       }
     }
   }

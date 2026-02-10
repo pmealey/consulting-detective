@@ -11,18 +11,27 @@ A **daily mystery game** inspired by *Sherlock Holmes, Consulting Detective* tab
 | File | Purpose |
 |------|---------|
 | `GAME_DESIGN.md` | What the game is, player loop, scoring |
-| `DATA_MODEL_DESIGN.md` | Data structure relationships (ER diagram), generation pipeline, scoring formula |
+| `DATA_MODEL_DESIGN.md` | Data structure relationships (ER diagram), fact–subject graph, generation pipeline, scoring formula |
 | `MOONSTONE_LINEAGE.md` | How the data model descends from the moonstone-packet project |
 | `DESIGN_DECISIONS.md` | Rationale for specific design choices -- read before proposing structural changes |
 | `lib/types/` | **Source of truth** for the case data model. Read these first. |
 | `lib/infrastructure-stack.ts` | CDK infrastructure stack (DynamoDB -- persistent data) |
 | `lib/consulting-detective-stack.ts` | CDK application stack (Lambda, API Gateway, S3+CloudFront, Step Functions) |
 | `lib/lambda/` | Backend Lambda handlers |
+| `lib/lambda/generate/compute-event-knowledge.ts` | Programmatic: role knowledge + location reveals from events |
+| `lib/lambda/generate/compute-facts.ts` | Programmatic: fact–subject graph, placeholders, bridge/red-herring facts |
+| `lib/lambda/generate/generate-template.ts` | AI: case template (crime type, setting, style/tone) |
+| `lib/lambda/generate/generate-introduction.ts` | AI: introduction fact selection + prose + title |
+| `lib/lambda/generate/validate-facts.ts` | Validation: fact placeholders expanded, categories and subject refs |
 | `ui/` | React + Vite + Tailwind frontend (separate npm package) |
 
 ## The Data Model Is the Source of Truth
 
 The TypeScript interfaces in `lib/types/` are the authoritative definition of a Case and all its components. The design docs explain *why* they're shaped the way they are. Read the types before changing anything structural.
+
+## Generation Pipeline (Summary)
+
+Steps: **GenerateTemplate** → **GenerateEvents** + ValidateEvents → **ComputeEventKnowledge** → **GenerateCharacters** + ValidateCharacters → **GenerateLocations** + ValidateLocations → **ComputeFacts** → **GenerateFacts** + ValidateFacts → **GenerateIntroduction** → **GenerateCasebook** + ValidateCasebook → **GenerateProse** (scenes only) → **GenerateQuestions** + ValidateQuestions → **ComputeOptimalPath** → **StoreCase**. Generate* steps use the LLM; Validate* steps check structure and references; Compute* steps are pure logic (no LLM). See `DATA_MODEL_DESIGN.md` for the full pipeline and fact–subject graph.
 
 ## Design Principles
 

@@ -2,13 +2,13 @@ import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, CASES_TABLE } from '../shared/db';
 import type { CaseGenerationState } from '../shared/generation-state';
 import type { Case } from '../../types/case';
-import type { CausalEvent, InvolvementType, EventNecessity } from '../../types/event';
+import type { CausalEvent, EventReveal, InvolvementType, EventNecessity } from '../../types/event';
 import type { Character } from '../../types/character';
 import type { KnowledgeStatus } from '../../types/fact';
 import type { Location, LocationType } from '../../types/location';
 import type { CasebookEntry } from '../../types/casebook';
 import type { Fact, FactCategory } from '../../types/fact';
-import type { Question } from '../../types/question';
+import type { Question, QuestionAnswer } from '../../types/question';
 import type { Difficulty } from '../../types/common';
 
 /**
@@ -49,7 +49,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       involvement: draft.involvement as Record<string, InvolvementType>,
       necessity: draft.necessity as EventNecessity,
       causes: draft.causes,
-      reveals: draft.reveals,
+      reveals: draft.reveals as EventReveal[],
     };
   }
 
@@ -61,8 +61,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       mysteryRole: draft.mysteryRole,
       societalRole: draft.societalRole,
       description: draft.description,
-      wants: draft.wants,
-      hides: draft.hides,
+      motivations: draft.motivations,
       knowledgeState: draft.knowledgeState as Record<string, KnowledgeStatus>,
       tone: draft.tone,
       currentStatus: draft.currentStatus,
@@ -88,6 +87,8 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       factId: draft.factId,
       description: draft.description,
       category: draft.category as FactCategory,
+      subjects: draft.subjects,
+      veracity: draft.veracity as 'true' | 'false',
     };
   }
 
@@ -108,8 +109,11 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   const finalQuestions: Question[] = questions.map((draft) => ({
     questionId: draft.questionId,
     text: draft.text,
-    answerFactIds: draft.answerFactIds,
-    answerCategory: draft.answerCategory as FactCategory,
+    answer: {
+      type: draft.answer.type as 'person' | 'location' | 'fact',
+      factCategory: draft.answer.factCategory as FactCategory | undefined,
+      acceptedIds: draft.answer.acceptedIds,
+    } satisfies QuestionAnswer,
     points: draft.points,
     difficulty: draft.difficulty as Difficulty,
   }));

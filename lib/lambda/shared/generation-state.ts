@@ -7,9 +7,12 @@ import { z } from 'zod';
 export const GENERATION_STEPS = [
   'generateTemplate',
   'generateEvents',
+  'computeEventKnowledge',
   'generateCharacters',
   'generateLocations',
+  'computeFacts',
   'generateFacts',
+  'generateIntroduction',
   'generateCasebook',
   'generateProse',
   'generateQuestions',
@@ -77,8 +80,13 @@ export interface CaseGenerationState {
   /** Number of times GenerateEvents has been retried after validation failure. */
   generateEventsRetries?: number;
 
+  // -- Step 2b: Compute Event Knowledge --
+  computedKnowledge?: ComputedKnowledge;
+
   // -- Step 3: Generate Characters --
   characters?: Record<string, CharacterDraft>;
+  /** Mapping from template roleId to generated characterId. */
+  roleMapping?: Record<string, string>;
   /** Result of character/event cross-reference validation after GenerateCharacters. */
   characterValidationResult?: ValidationResult;
   /** Number of times GenerateCharacters has been retried after validation failure. */
@@ -91,34 +99,45 @@ export interface CaseGenerationState {
   /** Number of times GenerateLocations has been retried after validation failure. */
   generateLocationsRetries?: number;
 
-  // -- Step 5: Generate Facts --
-  facts?: Record<string, FactDraft>;
-  introductionFactIds?: string[];
+  // -- Step 5: Compute Facts --
+  factPlaceholders?: FactPlaceholder[];
+  factGraph?: FactGraph;
 
-  // -- Step 6: Generate Casebook --
+  // -- Step 6: Generate Facts --
+  facts?: Record<string, FactDraft>;
+
+  // -- Step 6b: Validate Facts --
+  factValidationResult?: ValidationResult;
+  /** Number of times GenerateFacts has been retried after validation failure. */
+  generateFactsRetries?: number;
+
+  // -- Step 7: Generate Introduction --
+  introductionFactIds?: string[];
+  introduction?: string;
+  title?: string;
+
+  // -- Step 8: Generate Casebook --
   casebook?: Record<string, CasebookEntryDraft>;
 
-  // -- Step 6b: Validate Casebook --
+  // -- Step 8b: Validate Casebook --
   discoveryGraphResult?: DiscoveryGraphResult;
   /** Number of times GenerateCasebook has been retried after graph validation failure */
   generateCasebookRetries?: number;
 
-  // -- Step 7: Generate Prose --
+  // -- Step 9: Generate Prose (scenes only) --
   prose?: Record<string, string>;
-  introduction?: string;
-  title?: string;
 
-  // -- Step 8: Generate Questions --
+  // -- Step 10: Generate Questions --
   questions?: QuestionDraft[];
-  /** Result of question validation (answerFactIds exist, reachable, category match). */
+  /** Result of question validation (answer.acceptedIds exist, reachable, type valid). */
   questionValidationResult?: ValidationResult;
   /** Number of times GenerateQuestions has been retried after validation failure. */
   generateQuestionsRetries?: number;
 
-  // -- Step 9: Compute Optimal Path --
+  // -- Step 11: Compute Optimal Path --
   optimalPath?: string[];
 
-  // -- Step 10: Store Case (validation absorbed into ComputeOptimalPath) --
+  // -- Step 12: Store Case (validation absorbed into ComputeOptimalPath) --
   validationResult?: ValidationResult;
 }
 
@@ -136,6 +155,10 @@ export interface CaseTemplate {
   era: string;
   date: string;
   atmosphere: string;
+  /** The structural shape of the mystery — guides event design and casebook layout */
+  mysteryStyle: string;
+  /** The narrative voice and mood — guides prose generation across all steps */
+  narrativeTone: string;
   eventSlots: EventSlot[];
   characterRoles: CharacterRole[];
   difficulty: 'easy' | 'medium' | 'hard';
@@ -154,6 +177,14 @@ export interface CharacterRole {
   description: string;
 }
 
+export interface EventRevealDraft {
+  id: string;
+  audible: boolean;
+  visible: boolean;
+  physical: boolean;
+  subjects: string[];
+}
+
 export interface EventDraft {
   eventId: string;
   description: string;
@@ -163,7 +194,7 @@ export interface EventDraft {
   involvement: Record<string, string>;
   necessity?: 'required' | undefined;
   causes: string[];
-  reveals: string[];
+  reveals: EventRevealDraft[];
 }
 
 export interface CharacterDraft {
@@ -172,8 +203,7 @@ export interface CharacterDraft {
   mysteryRole: string;
   societalRole: string;
   description: string;
-  wants: string[];
-  hides: string[];
+  motivations: string[];
   knowledgeState: Record<string, string>;
   tone: {
     register: string;
@@ -198,6 +228,8 @@ export interface FactDraft {
   factId: string;
   description: string;
   category: string;
+  subjects: string[];
+  veracity: string;
 }
 
 export interface CasebookEntryDraft {
@@ -213,10 +245,15 @@ export interface CasebookEntryDraft {
 export interface QuestionDraft {
   questionId: string;
   text: string;
-  answerFactIds: string[];
-  answerCategory: string;
+  answer: QuestionAnswerDraft;
   points: number;
   difficulty: 'easy' | 'medium' | 'hard';
+}
+
+export interface QuestionAnswerDraft {
+  type: string;
+  factCategory?: string;
+  acceptedIds: string[];
 }
 
 export interface ValidationResult {
@@ -234,6 +271,54 @@ export interface DiscoveryGraphResult {
 }
 
 // ============================================
+// Intermediate Types for Compute Steps
+// ============================================
+
+/**
+ * Output of ComputeEventKnowledge: baseline knowledge derived from
+ * event involvement and perception channels. Operates on role IDs
+ * (characters don't exist yet at this pipeline stage).
+ */
+export interface ComputedKnowledge {
+  /** Baseline knowledge per role: roleId -> factPlaceholderId -> 'knows' */
+  roleKnowledge: Record<string, Record<string, 'knows'>>;
+  /** Facts discoverable as physical evidence at each location: locationPlaceholderId -> factPlaceholderIds */
+  locationReveals: Record<string, string[]>;
+}
+
+/**
+ * A fact placeholder produced by ComputeFacts, before the AI fills in
+ * description and category in GenerateFacts.
+ */
+export interface FactPlaceholder {
+  /** Placeholder ID, e.g. "fact_suspect_left_handed" */
+  placeholderId: string;
+  /** characterIds and locationIds this fact is about */
+  subjects: string[];
+  /** Whether this is a true or false fact */
+  veracity: 'true' | 'false';
+  /** Where this placeholder originated */
+  source: FactPlaceholderSource;
+}
+
+export type FactPlaceholderSource =
+  | { type: 'event_reveal'; eventId: string }
+  | { type: 'denial'; characterId: string; deniedFactId: string }
+  | { type: 'bridge'; fromCharacterId: string; toSubject: string }
+  | { type: 'red_herring' };
+
+/**
+ * The fact-subject bipartite graph produced by ComputeFacts.
+ * Used by GenerateIntroduction and GenerateCasebook for connectivity analysis.
+ */
+export interface FactGraph {
+  /** factPlaceholderId -> subject IDs (characterIds and locationIds) */
+  factToSubjects: Record<string, string[]>;
+  /** subjectId -> factPlaceholderIds that this subject can reveal */
+  subjectToFacts: Record<string, string[]>;
+}
+
+// ============================================
 // Zod Schemas for LLM Output Validation
 //
 // Each schema validates what the LLM returns for that step.
@@ -247,6 +332,8 @@ export const CaseTemplateSchema = z.object({
   era: z.string().min(1),
   date: z.string().min(1),
   atmosphere: z.string().min(1),
+  mysteryStyle: z.string().min(1),
+  narrativeTone: z.string().min(1),
   eventSlots: z
     .array(
       z.object({
@@ -269,6 +356,14 @@ export const CaseTemplateSchema = z.object({
   difficulty: z.enum(['easy', 'medium', 'hard']),
 });
 
+export const EventRevealSchema = z.object({
+  id: z.string().min(1),
+  audible: z.boolean(),
+  visible: z.boolean(),
+  physical: z.boolean(),
+  subjects: z.array(z.string().min(1)).min(1),
+});
+
 export const EventsSchema = z.record(
   z.string(),
   z.object({
@@ -280,9 +375,11 @@ export const EventsSchema = z.record(
     involvement: z.record(z.string(), z.string()),
     necessity: z.literal('required').optional(),
     causes: z.array(z.string()),
-    reveals: z.array(z.string()),
+    reveals: z.array(EventRevealSchema).min(1),
   }),
 );
+
+export const KnowledgeStatusSchema = z.enum(['knows', 'suspects', 'hides', 'denies', 'believes']);
 
 export const CharacterSchema = z.object({
   characterId: z.string().min(1),
@@ -290,9 +387,8 @@ export const CharacterSchema = z.object({
   mysteryRole: z.string().min(1),
   societalRole: z.string().min(1),
   description: z.string().min(1),
-  wants: z.array(z.string()).min(1),
-  hides: z.array(z.string()),
-  knowledgeState: z.record(z.string(), z.string()),
+  motivations: z.array(z.string()).min(1),
+  knowledgeState: z.record(z.string(), KnowledgeStatusSchema),
   tone: z.object({
     register: z.string().min(1),
     vocabulary: z.array(z.string()).min(1),
@@ -330,16 +426,33 @@ export const FactsSchema = z.record(
     category: z.enum([
       'motive', 'means', 'opportunity', 'alibi',
       'relationship', 'timeline', 'physical_evidence', 'background',
-      'person', 'place',
+    ]),
+    subjects: z.array(z.string().min(1)).min(1),
+    veracity: z.enum(['true', 'false']),
+  }),
+);
+
+/**
+ * Schema for GenerateFacts AI output: the AI provides factId, description,
+ * and category for each placeholder. Subjects and veracity come from the
+ * placeholder and are merged programmatically after validation.
+ *
+ * Keyed by placeholderId so we can match AI output back to placeholders.
+ */
+export const GenerateFactsOutputSchema = z.record(
+  z.string(),
+  z.object({
+    factId: z.string().min(1),
+    description: z.string().min(5),
+    category: z.enum([
+      'motive', 'means', 'opportunity', 'alibi',
+      'relationship', 'timeline', 'physical_evidence', 'background',
     ]),
   }),
 );
 
-/** Schema for step 5 output: facts + introductionFactIds */
-export const GenerateFactsResultSchema = z.object({
-  facts: FactsSchema,
-  introductionFactIds: z.array(z.string().min(1)).min(2).max(4),
-});
+/** Inferred type for a single entry in the GenerateFacts AI output. */
+export type GenerateFactsOutputEntry = z.infer<typeof GenerateFactsOutputSchema>[string];
 
 export const CasebookSchema = z.record(
   z.string(),
@@ -354,6 +467,23 @@ export const CasebookSchema = z.record(
   }),
 );
 
+/**
+ * Schema for the AI polish output from GenerateCasebook.
+ * The AI provides labels, addresses, and character presence for each
+ * entry in the programmatic skeleton. Structural fields (revealsFactIds,
+ * requiresAnyFact, locationId) are NOT included — they come from the
+ * programmatic phase and must not be changed.
+ */
+export const CasebookPolishSchema = z.record(
+  z.string(),
+  z.object({
+    entryId: z.string().min(1),
+    label: z.string().min(1),
+    address: z.string().min(1),
+    characters: z.array(z.string()),
+  }),
+);
+
 export const ProseSchema = z.object({
   title: z.string().min(1),
   introduction: z.string().min(10),
@@ -365,21 +495,39 @@ export const IntroductionSchema = z.object({
   introduction: z.string().min(10),
 });
 
+/**
+ * Schema for the GenerateIntroduction step output.
+ * The AI selects 2-4 introduction facts, writes the opening scene,
+ * and finalizes the case title.
+ */
+export const GenerateIntroductionOutputSchema = z.object({
+  /** 2-4 factIds that form the opening hook — seeds the investigation */
+  introductionFactIds: z.array(z.string().min(1)).min(2).max(4),
+  /** Finalized case title (may refine the template title) */
+  title: z.string().min(1),
+  /** 2-4 paragraph opening scene (200-400 words) */
+  introduction: z.string().min(10),
+});
+
 export const SceneBatchSchema = z.record(z.string(), z.string().min(10));
 
 const FactCategorySchema = z.enum([
   'motive', 'means', 'opportunity', 'alibi',
   'relationship', 'timeline', 'physical_evidence', 'background',
-  'person', 'place',
 ]);
+
+export const QuestionAnswerSchema = z.object({
+  type: z.enum(['person', 'location', 'fact']),
+  factCategory: FactCategorySchema.optional(),
+  acceptedIds: z.array(z.string().min(1)).min(1),
+});
 
 export const QuestionsSchema = z
   .array(
     z.object({
       questionId: z.string().min(1),
       text: z.string().min(1),
-      answerFactIds: z.array(z.string().min(1)).min(1),
-      answerCategory: FactCategorySchema,
+      answer: QuestionAnswerSchema,
       points: z.number().int().min(1),
       difficulty: z.enum(['easy', 'medium', 'hard']),
     }),

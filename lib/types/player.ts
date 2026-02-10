@@ -3,7 +3,8 @@
  *
  * These are NOT stored in DDB with the case. They represent the player's
  * local state as they play through a case: which entries they've visited,
- * what facts they've discovered, and their quiz answers.
+ * what facts they've discovered, what subjects they've learned about,
+ * and their quiz answers.
  */
 
 export interface PlayerSession {
@@ -15,6 +16,9 @@ export interface PlayerSession {
 
   /** factIds the player has revealed through their visits */
   discoveredFacts: string[];
+
+  /** characterIds and locationIds the player has learned about through discovered facts */
+  discoveredSubjects: string[];
 
   /** The player's submitted quiz answers */
   answers: PlayerAnswer[];
@@ -30,8 +34,8 @@ export interface PlayerAnswer {
   /** Which question this answers */
   questionId: string;
 
-  /** The factId the player selected as their answer */
-  answerFactId: string;
+  /** The ID the player selected as their answer (factId, characterId, or locationId) */
+  answerId: string;
 }
 
 export interface CaseResult {

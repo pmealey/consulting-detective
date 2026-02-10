@@ -38,15 +38,17 @@ export function getAllSessions(): Record<string, PlayerSession> {
   return sessions;
 }
 
-/** Create a new session for a case. Optionally seed with intro facts. */
+/** Create a new session for a case. Optionally seed with intro facts and their subjects. */
 export function createSession(
   caseDate: string,
   introductionFactIds?: string[],
+  introductionSubjects?: string[],
 ): PlayerSession {
   const session: PlayerSession = {
     caseDate,
     visitedEntries: [],
     discoveredFacts: introductionFactIds ?? [],
+    discoveredSubjects: introductionSubjects ?? [],
     answers: [],
     startedAt: new Date().toISOString(),
   };
@@ -54,9 +56,9 @@ export function createSession(
   return session;
 }
 
-/** True if the player's selected factId is one of the question's acceptable answers. */
-function isCorrect(playerFactId: string, correctFactIds: string[]): boolean {
-  return correctFactIds.includes(playerFactId);
+/** True if the player's selected answerId is one of the question's acceptable answers. */
+function isCorrect(answerId: string, acceptedIds: string[]): boolean {
+  return acceptedIds.includes(answerId);
 }
 
 const PENALTY_PER_EXTRA_VISIT = 5;
@@ -66,14 +68,14 @@ export function computeResult(session: PlayerSession, gameCase: Case): CaseResul
   let questionsCorrect = 0;
   for (const question of gameCase.questions) {
     const playerAnswer = session.answers.find(a => a.questionId === question.questionId);
-    if (playerAnswer && isCorrect(playerAnswer.answerFactId, question.answerFactIds)) {
+    if (playerAnswer && isCorrect(playerAnswer.answerId, question.answer.acceptedIds)) {
       questionsCorrect++;
     }
   }
 
   const questionsScore = gameCase.questions.reduce((sum, question) => {
     const playerAnswer = session.answers.find(a => a.questionId === question.questionId);
-    if (playerAnswer && isCorrect(playerAnswer.answerFactId, question.answerFactIds)) {
+    if (playerAnswer && isCorrect(playerAnswer.answerId, question.answer.acceptedIds)) {
       return sum + question.points;
     }
     return sum;

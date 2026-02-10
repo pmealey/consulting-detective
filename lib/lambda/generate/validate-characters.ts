@@ -1,7 +1,17 @@
 import type {
   CaseGenerationState,
   ValidationResult,
+  CharacterDraft,
 } from '../shared/generation-state';
+
+/** Allowed knowledge state values (knows, suspects, hides, denies, believes). */
+const VALID_KNOWLEDGE_STATUS = new Set<string>([
+  'knows',
+  'suspects',
+  'hides',
+  'denies',
+  'believes',
+]);
 
 /**
  * Pipeline Step 3b: Validate Characters (after GenerateCharacters)
@@ -11,6 +21,7 @@ import type {
  *
  * - Every event.agent references a valid characterId
  * - Every key in event.involvement references a valid characterId
+ * - Every character.knowledgeState value is a valid KnowledgeStatus
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
   const { events, characters } = state;
@@ -46,6 +57,17 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       if (!characterIds.has(charId)) {
         errors.push(
           `Event ${event.eventId}: involvement references non-character "${charId}"`,
+        );
+      }
+    }
+  }
+
+  for (const char of Object.values(characters) as CharacterDraft[]) {
+    if (!char.knowledgeState) continue;
+    for (const [factId, status] of Object.entries(char.knowledgeState)) {
+      if (!VALID_KNOWLEDGE_STATUS.has(status)) {
+        errors.push(
+          `Character ${char.characterId}: knowledgeState for "${factId}" has invalid value "${status}"; must be one of: ${[...VALID_KNOWLEDGE_STATUS].join(', ')}`,
         );
       }
     }

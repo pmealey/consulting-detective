@@ -61,7 +61,21 @@ export function QuestionsAnsweredView({
           );
           const isCorrect =
             playerAnswer &&
-            question.answerFactIds.includes(playerAnswer.answerFactId);
+            question.answer.acceptedIds.includes(playerAnswer.answerId);
+
+          /** Resolve an answer ID to a display label based on the question's answer type. */
+          const resolveLabel = (id: string): string => {
+            switch (question.answer.type) {
+              case 'fact':
+                return facts[id]?.description ?? id;
+              case 'person':
+                return gameCase.characters[id]?.name ?? id;
+              case 'location':
+                return gameCase.locations[id]?.name ?? id;
+              default:
+                return id;
+            }
+          };
 
           return (
             <div
@@ -88,14 +102,14 @@ export function QuestionsAnsweredView({
                 <div className="text-sm">
                   <span className="text-stone-500">Your answer: </span>
                   <span className={isCorrect ? 'text-green-800' : 'text-red-800'}>
-                    {playerAnswer ? (facts[playerAnswer.answerFactId]?.description ?? '(unknown fact)') : '(no answer)'}
+                    {playerAnswer ? resolveLabel(playerAnswer.answerId) : '(no answer)'}
                   </span>
                 </div>
-                {!isCorrect && question.answerFactIds.length > 0 && (
+                {!isCorrect && question.answer.acceptedIds.length > 0 && (
                   <div className="text-sm">
                     <span className="text-stone-500">Correct answer: </span>
                     <span className="text-green-800 font-medium">
-                      {facts[question.answerFactIds[0]]?.description ?? question.answerFactIds[0]}
+                      {resolveLabel(question.answer.acceptedIds[0])}
                     </span>
                   </div>
                 )}

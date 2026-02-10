@@ -1,89 +1,74 @@
 import { callModel } from '../shared/bedrock';
 import {
-  GenerateFactsResultSchema,
+  GenerateFactsOutputSchema,
   type CaseGenerationState,
+  type FactDraft,
+  type FactPlaceholder,
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 5: Generate Facts
+ * Pipeline Step 7: Generate Facts
  *
- * Extracts facts from the event chain and character knowledge,
- * tags each with a category. Creates person and place identity atoms
- * alongside relational/evidentiary facts. Selects 2-4 introduction
- * facts that seed the player's investigation.
+ * Receives all fact placeholders from ComputeFacts (step 6). Each placeholder
+ * already has subjects, veracity, and source context determined. The AI's job
+ * is narrower and well-defined: provide a factId, a rich description, and a
+ * category for each placeholder.
+ *
+ * After the AI responds, we merge its output with the placeholder data to
+ * produce the final Record<string, FactDraft> that downstream steps consume.
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template, events, characters, locations } = state;
+  const { input, template, events, characters, locations, factPlaceholders, factValidationResult } = state;
 
-  if (!template) throw new Error('Step 5 requires template from step 1');
-  if (!events) throw new Error('Step 5 requires events from step 2');
-  if (!characters) throw new Error('Step 5 requires characters from step 3');
-  if (!locations) throw new Error('Step 5 requires locations from step 4');
+  if (!template) throw new Error('GenerateFacts requires template from step 1');
+  if (!events) throw new Error('GenerateFacts requires events from step 2');
+  if (!characters) throw new Error('GenerateFacts requires characters from step 3');
+  if (!locations) throw new Error('GenerateFacts requires locations from step 4');
+  if (!factPlaceholders || factPlaceholders.length === 0) {
+    throw new Error('GenerateFacts requires factPlaceholders from ComputeFacts');
+  }
 
-  // Gather all fact placeholders from events
-  const factPlaceholders = [...new Set(Object.values(events).flatMap((e) => e.reveals))];
+  const systemPrompt = `You are a mystery designer for a detective mystery game. You are given a set of fact placeholders — structural slots that have already been determined by the game engine. Each placeholder has:
 
-  const systemPrompt = `You are a mystery designer for a mystery game. Given the case structure so far — events, characters, and locations — you define the discoverable facts that form the knowledge atoms of the mystery.
+- A placeholder ID (your key for the output)
+- Subjects (characterIds and locationIds the fact is about)
+- Veracity ("true" or "false" — false facts are misinformation)
+- Source context (where the placeholder came from: an event reveal, a character's denial, a bridge connection, or a red herring)
 
-First, briefly reason through what facts the mystery needs: what evidence points to the truth, what red herrings exist, and how facts distribute across categories. Then provide the JSON.
+Your job is to provide three things for each placeholder:
 
-Your response must end with valid JSON matching this structure:
-{
-  "facts": Record<string, Fact>,
-  "introductionFactIds": string[]   // 2-4 factIds revealed in the opening briefing
-}
+1. **factId** — a descriptive snake_case identifier (e.g. "fact_victim_left_handed")
+2. **description** — a clear, specific, concrete description of what a detective discovers
+3. **category** — one of the 8 categories below
 
-Each Fact must match this schema:
-{
-  "factId": string,             // e.g. "fact_victim_left_handed"
-  "description": string,        // clear, specific description
-  "category": "motive" | "means" | "opportunity" | "alibi" | "relationship" | "timeline" | "physical_evidence" | "background" | "person" | "place"
-}
+Your response must end with valid JSON: a Record<placeholderId, { factId, description, category }>.
 
-## Fact categories
+## Fact Categories
 
-The "person" and "place" categories are **identity atoms** — they establish that an entity exists and what it is. They are NOT relational claims.
-
-**Person facts** — one per character relevant to the mystery. The description should be a short noun-phrase identifier: a name and role/title.
-  Examples:
-  - factId: "fact_harold_marsh", category: "person", description: "Harold Marsh, co-owner of Marsh & Foller Import/Export Company"
-  - factId: "fact_inspector_lestrade", category: "person", description: "Inspector Lestrade of Scotland Yard"
-
-**Place facts** — one per location that will become a casebook entry. The description should be a short noun-phrase: a name and brief descriptor.
-  Examples:
-  - factId: "fact_warehouse_limehouse", category: "place", description: "Warehouse on Limehouse Street"
-  - factId: "fact_lord_pemberton_study", category: "place", description: "Lord Pemberton's study at Pemberton Hall"
-
-Person/place facts do NOT embed relational meaning. Relational and evidentiary meaning about persons/places belongs in separate facts with existing categories:
-  - "fact_harold_marsh" (person): "Harold Marsh, co-owner of Marsh & Foller"
-  - "fact_harold_marsh_partner" (relationship): "Harold Marsh was the victim's business partner"
-  - "fact_harold_marsh_debt" (motive): "Marsh owed the victim 400 pounds"
-  - "fact_warehouse_limehouse" (place): "Warehouse on Limehouse Street"
-
-The remaining categories — motive, means, opportunity, alibi, relationship, timeline, physical_evidence, background — are relational or evidentiary claims: specific, concrete things a detective discovers about the case.
-
-## Introduction facts
-
-Choose 2-4 facts as "introductionFactIds" — these are the facts the player learns from the opening briefing (e.g. the crime that was committed, the victim's identity, the investigator in charge). Introduction facts should:
-- Be enough to make several casebook entries reachable (they seed the investigation)
-- NOT give away so much that nothing remains gated
-- Typically include the victim (person fact), the crime scene (place fact), and 1-2 key setting facts
+- **motive**: Why someone did something (grudge, desire, debt, jealousy)
+- **means**: How the crime was committed (method, weapon, technique, access)
+- **opportunity**: When/whether someone had the chance to act
+- **alibi**: Evidence of someone's whereabouts at a key time
+- **relationship**: A connection between people or entities
+- **timeline**: When something happened or sequence of events
+- **physical_evidence**: An object, trace, or document found at a scene
+- **background**: Context that helps understand the case
 
 ## Guidelines
 
-- Create a fact for each placeholder referenced in the events' "reveals" arrays.
-- Create a fact for each fact ID placeholder in the "hides" arrays of the characters.
-- Create one **person** fact for each character relevant to the mystery.
-- Create one **place** fact for each location.
-- Add additional relational/evidentiary facts:
-  * At least 4 motive facts
-  * At least 2 means fact
-  * At least 2 opportunity fact
-  * At least 4 relationship facts
-  * At least 2 background facts
-  * A mix of timeline and physical_evidence facts
-- Facts should be specific and concrete: "The victim owed Blackwood £400" not "The victim had debts."
-- Fact descriptions should be what a detective discovers, not authorial commentary.`;
+- Descriptions should be what a detective discovers, not authorial commentary.
+- Be specific and concrete: "The victim owed Blackwood £400" not "The victim had debts."
+- For **false facts** (veracity: "false"): write the description as the misinformation itself — what the lying/mistaken character would claim. It should sound plausible.
+- For **denial** placeholders: the false fact should be a plausible counter-narrative to the denied true fact. Look at the denied fact's context to craft a convincing lie.
+- For **bridge** placeholders: create a natural connection between the two subjects (e.g. a relationship, a shared history, a rumor).
+- For **red herring** placeholders: create something interesting but ultimately irrelevant — a suspicious detail, an old grudge, a coincidence.
+- Every factId must be unique across all placeholders.
+- Category should match the nature of the fact, not just its source.
+- Think about how facts form a coherent mystery narrative. Facts from the same event should tell a consistent story.`;
+
+  const placeholderDescriptions = factPlaceholders.map((p) =>
+    formatPlaceholderForPrompt(p, state),
+  );
 
   const userPrompt = `Here is the case context:
 
@@ -91,33 +76,121 @@ Title: ${template.title}
 Crime Type: ${template.crimeType}
 Setting: ${template.era}
 
-Fact placeholders referenced in events:
-${factPlaceholders.map((f) => `  - ${f}`).join('\n')}
-
 Events (chronological):
-${Object.values(events).sort((a, b) => a.timestamp - b.timestamp).map((e) => `  - ${e.eventId}: ${e.description} (reveals: [${e.reveals.join(', ')}])`).join('\n')}
+${Object.values(events).sort((a, b) => a.timestamp - b.timestamp).map((e) => `  - ${e.eventId}: ${e.description}`).join('\n')}
 
 Characters:
-${Object.values(characters).map((c) => `  - ${c.name} (${c.mysteryRole}, ${c.societalRole}): wants=[${c.wants.join('; ')}], hides=[${c.hides.join('; ')}]`).join('\n')}
+${Object.values(characters).map((c) => `  - ${c.characterId}: ${c.name} (${c.mysteryRole}, ${c.societalRole}): motivations=[${c.motivations.join('; ')}]`).join('\n')}
 
-Key locations:
+Locations:
 ${Object.values(locations).map((l) => `  - ${l.locationId}: ${l.name} (${l.type})`).join('\n')}
 
-Define all facts. Each placeholder must become a concrete fact. Create person facts for each character and place facts for each key location. Add relational/evidentiary facts to flesh out the mystery. Choose 2-4 introduction facts that seed the investigation. Think through what evidence the mystery needs first, then provide the JSON.`;
+## Fact Placeholders to Fill (${factPlaceholders.length} total)
 
-  const { data: result } = await callModel(
+For each placeholder below, provide a factId, description, and category.
+
+${placeholderDescriptions.join('\n\n')}
+
+First, briefly reason through the narrative: what story do these facts tell together? How do the false facts create confusion? How do the bridge facts connect different threads? Then provide the JSON.
+
+Your JSON must be a Record<placeholderId, { factId, description, category }> with exactly ${factPlaceholders.length} entries — one for each placeholder listed above.${
+    factValidationResult && !factValidationResult.valid
+      ? `
+
+## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
+
+Your previous output failed validation. You MUST fix these errors:
+
+${factValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
+      : ''
+  }`;
+
+  const { data: aiOutput } = await callModel(
     {
       stepName: 'generateFacts',
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,
     },
-    (raw) => GenerateFactsResultSchema.parse(raw),
+    (raw) => GenerateFactsOutputSchema.parse(raw),
   );
+
+  // Merge AI output with placeholder data to produce final FactDraft records
+  const facts: Record<string, FactDraft> = {};
+  const placeholderMap = new Map(factPlaceholders.map((p) => [p.placeholderId, p]));
+
+  for (const [placeholderId, aiEntry] of Object.entries(aiOutput)) {
+    const placeholder = placeholderMap.get(placeholderId);
+    if (!placeholder) {
+      // AI returned an entry for a placeholder that doesn't exist — skip it.
+      // ValidateFacts will catch missing placeholders.
+      continue;
+    }
+
+    facts[aiEntry.factId] = {
+      factId: aiEntry.factId,
+      description: aiEntry.description,
+      category: aiEntry.category,
+      subjects: [...placeholder.subjects],
+      veracity: placeholder.veracity,
+    };
+  }
 
   return {
     ...state,
-    facts: result.facts,
-    introductionFactIds: result.introductionFactIds,
+    facts,
   };
 };
+
+// ============================================
+// Helpers
+// ============================================
+
+/**
+ * Formats a single placeholder for the AI prompt, including source context
+ * so the AI can write appropriate descriptions.
+ */
+function formatPlaceholderForPrompt(
+  placeholder: FactPlaceholder,
+  state: CaseGenerationState,
+): string {
+  const { events, characters, locations } = state;
+  const subjectNames = placeholder.subjects.map((id) => {
+    if (characters?.[id]) return `${id} (${characters[id].name})`;
+    if (locations?.[id]) return `${id} (${locations[id].name})`;
+    return id;
+  });
+
+  let sourceContext = '';
+  switch (placeholder.source.type) {
+    case 'event_reveal': {
+      const event = events?.[placeholder.source.eventId];
+      sourceContext = event
+        ? `From event "${event.eventId}": ${event.description}`
+        : `From event "${placeholder.source.eventId}"`;
+      break;
+    }
+    case 'denial': {
+      const denier = characters?.[placeholder.source.characterId];
+      sourceContext = `Denial by ${denier?.name ?? placeholder.source.characterId} — this is a FALSE counter-narrative to the true fact "${placeholder.source.deniedFactId}". Write what the character falsely claims.`;
+      break;
+    }
+    case 'bridge': {
+      const fromChar = characters?.[placeholder.source.fromCharacterId];
+      const toSubjectName = characters?.[placeholder.source.toSubject]?.name
+        ?? locations?.[placeholder.source.toSubject]?.name
+        ?? placeholder.source.toSubject;
+      sourceContext = `Bridge fact: connects ${fromChar?.name ?? placeholder.source.fromCharacterId} to ${toSubjectName}. Create a natural connection (relationship, shared history, rumor, etc.)`;
+      break;
+    }
+    case 'red_herring': {
+      sourceContext = 'Red herring: an interesting but ultimately irrelevant detail that adds noise to the investigation.';
+      break;
+    }
+  }
+
+  return `### ${placeholder.placeholderId}
+  Subjects: [${subjectNames.join(', ')}]
+  Veracity: ${placeholder.veracity}
+  Source: ${sourceContext}`;
+}

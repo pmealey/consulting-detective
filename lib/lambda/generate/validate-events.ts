@@ -2,7 +2,17 @@ import type {
   CaseGenerationState,
   ValidationResult,
   EventDraft,
+  EventRevealDraft,
 } from '../shared/generation-state';
+
+/** Allowed involvement types; 'present' replaces legacy participant/witness_direct. */
+const VALID_INVOLVEMENT_TYPES = new Set<string>([
+  'agent',
+  'present',
+  'witness_visual',
+  'witness_auditory',
+  'discovered_evidence',
+]);
 
 /**
  * Pipeline Step 2b: Validate Events (after GenerateEvents)
@@ -10,6 +20,8 @@ import type {
  * Pure logic — no LLM call. Validates event self-consistency only:
  * - Every event.causes references an existing eventId
  * - Every event's involvement map includes the agent with type "agent"
+ * - Every involvement type value is allowed (agent, present, witness_visual, witness_auditory, discovered_evidence)
+ * - Every event has enriched reveals (id, audible, visible, physical, subjects)
  * - The causal graph (eventId -> causes) is acyclic
  *
  * Does not validate agent/location against characters/locations (those are
@@ -46,6 +58,21 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
         `Event ${event.eventId}: agent "${event.agent}" must be listed in involvement with type "agent"`,
       );
     }
+    for (const [roleId, invType] of Object.entries(event.involvement)) {
+      if (!VALID_INVOLVEMENT_TYPES.has(invType)) {
+        errors.push(
+          `Event ${event.eventId}: involvement type "${invType}" for "${roleId}" is invalid; must be one of: ${[...VALID_INVOLVEMENT_TYPES].join(', ')}`,
+        );
+      }
+    }
+    if (!event.reveals || event.reveals.length === 0) {
+      errors.push(`Event ${event.eventId}: reveals must be a non-empty array`);
+    } else {
+      for (let i = 0; i < event.reveals.length; i++) {
+        const errs = validateEventReveal(event.eventId, event.reveals[i], i);
+        errors.push(...errs);
+      }
+    }
   }
 
   if (errors.length > 0) {
@@ -69,6 +96,40 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     eventValidationResult: { valid: true, errors: [], warnings },
   };
 };
+
+/**
+ * Validates a single event reveal (enriched structure: id, audible, visible, physical, subjects).
+ */
+function validateEventReveal(
+  eventId: string,
+  reveal: EventRevealDraft,
+  index: number,
+): string[] {
+  const errs: string[] = [];
+  const prefix = `Event ${eventId}: reveals[${index}]`;
+  if (typeof reveal.id !== 'string' || reveal.id.trim() === '') {
+    errs.push(`${prefix}: id is required and must be non-empty`);
+  }
+  if (typeof reveal.audible !== 'boolean') {
+    errs.push(`${prefix}: audible must be a boolean`);
+  }
+  if (typeof reveal.visible !== 'boolean') {
+    errs.push(`${prefix}: visible must be a boolean`);
+  }
+  if (typeof reveal.physical !== 'boolean') {
+    errs.push(`${prefix}: physical must be a boolean`);
+  }
+  if (!Array.isArray(reveal.subjects) || reveal.subjects.length === 0) {
+    errs.push(`${prefix}: subjects must be a non-empty array of strings`);
+  } else {
+    for (let i = 0; i < reveal.subjects.length; i++) {
+      if (typeof reveal.subjects[i] !== 'string' || reveal.subjects[i].trim() === '') {
+        errs.push(`${prefix}: subjects[${i}] must be a non-empty string`);
+      }
+    }
+  }
+  return errs;
+}
 
 /**
  * Builds the causal graph (from eventId -> caused eventIds) and checks acyclicity

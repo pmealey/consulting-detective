@@ -1,6 +1,5 @@
 import { callModel } from '../shared/bedrock';
 import {
-  IntroductionSchema,
   SceneBatchSchema,
   type CaseGenerationState,
   type CasebookEntryDraft,
@@ -10,24 +9,29 @@ import {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 7: Generate Prose Scenes
+ * Pipeline Step 9: Generate Prose Scenes
  *
- * Generates prose in two calls:
- *   1. One call for the introduction and title
- *   2. One call for ALL casebook scenes (ensures cross-scene coherence)
+ * Generates prose scenes for ALL casebook entries in a single LLM call
+ * to ensure cross-scene coherence.
  *
- * Each scene is filtered through present characters' knowledge states
- * and tone profiles.
+ * The introduction and title are already written by GenerateIntroduction
+ * (step 7) — this step only produces casebook scenes.
+ *
+ * Each scene uses present characters' knowledge states (knows, suspects,
+ * hides, denies, believes) and fact veracity so false facts are presented
+ * as believed by characters who hold them.
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template, events, characters, locations, facts, casebook } = state;
+  const { input, template, events, characters, locations, facts, casebook, introduction, title } = state;
 
-  if (!template) throw new Error('Step 7 requires template from step 1');
-  if (!events) throw new Error('Step 7 requires events from step 2');
-  if (!characters) throw new Error('Step 7 requires characters from step 3');
-  if (!locations) throw new Error('Step 7 requires locations from step 4');
-  if (!facts) throw new Error('Step 7 requires facts from step 5');
-  if (!casebook) throw new Error('Step 7 requires casebook from step 6');
+  if (!template) throw new Error('GenerateProse requires template from step 1');
+  if (!events) throw new Error('GenerateProse requires events from step 2');
+  if (!characters) throw new Error('GenerateProse requires characters from step 3');
+  if (!locations) throw new Error('GenerateProse requires locations from step 4');
+  if (!facts) throw new Error('GenerateProse requires facts from step 6');
+  if (!casebook) throw new Error('GenerateProse requires casebook from step 8');
+  if (!introduction) throw new Error('GenerateProse requires introduction from step 7');
+  if (!title) throw new Error('GenerateProse requires title from step 7');
 
   const entries = Object.values(casebook);
 
@@ -43,59 +47,20 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
 - Characters reveal facts they KNOW about naturally through dialogue or observation.
 - Characters who SUSPECT something should hint at it indirectly.
 - Characters who HIDE something should deflect, change the subject, or give misleading information.
+- Characters who DENY something should actively contradict the truth — they have a false version they believe.
+- Characters who BELIEVE a false fact should state it confidently as truth.
 - Physical evidence facts should be woven into environmental descriptions.
+- Include fact veracity awareness: false facts (veracity: "false") should be presented as if true by characters who believe them.
 - Never tell the player the significance of what they've found — let them connect the dots.
 - The prose should reward careful reading without being obtuse.
-- Maintain the atmospheric tone: ${template.atmosphere}.
+- Maintain the narrative tone: ${template.narrativeTone}.
+- Maintain the atmospheric mood: ${template.atmosphere}.
 - Keep each character's current status in mind. Characters who cannot be met or interviewed (e.g. deceased, missing) must NOT appear as speaking or interactable.
 - Avoid common AI writing tells like em-dashes, asterisks, or excessive line breaks.
-- Locations that are accessible, visible, or audible from this one should be mentioned in the scene.`;
+- Locations that are accessible, visible, or audible from this one should be mentioned in the scene.
 
-  // ---- Call 1: Introduction and Title ----
-
-  const introSystemPrompt = `You are a mystery writer crafting the opening scene for a detective game. The introduction is what the player reads before they begin investigating.
-
-First, briefly plan the narrative arc of the introduction. Then provide the JSON.
-
-Your response must end with valid JSON matching this schema:
-{
-  "title": string,          // Final case title (may refine the template title)
-  "introduction": string    // 2-4 paragraph opening scene (150-300 words)
-}
-
-Introduction guidelines:
-- Set the scene: where the player is summoned, who called them in, what the initial situation appears to be.
-- Establish the atmosphere and era.
-- Give the player just enough to start investigating, but don't give away the solution.
-
-${sceneGuidelines}`;
-
-  const introUserPrompt = `Here is the case context:
-
-Title: ${template.title}
-Setting: ${template.era}, ${template.date}
-Atmosphere: ${template.atmosphere}
-Crime Type: ${template.crimeType}
-
-The story (chronological events):
-${storyTimeline}
-
-Characters:
-${Object.values(characters).map((c) => `  - ${c.name} (${c.mysteryRole}, ${c.societalRole})${c.currentStatus ? ` [current status: ${c.currentStatus}]` : ''}`).join('\n')}
-
-Write the introduction. Plan your approach first, then provide the JSON.`;
-
-  const { data: intro } = await callModel(
-    {
-      stepName: 'generateProse',
-      systemPrompt: introSystemPrompt,
-      userPrompt: introUserPrompt,
-      modelConfig: input.modelConfig,
-    },
-    (raw) => IntroductionSchema.parse(raw),
-  );
-
-  // ---- Call 2: All Scenes ----
+Mystery Style Prose Constraints (CRITICAL — the mystery style is "${template.mysteryStyle}"):
+${getMysteryStyleProseConstraints(template.mysteryStyle)}`;
 
   const entryContexts = entries.map((entry) =>
     buildEntryContext(entry, locations, characters, facts),
@@ -103,7 +68,7 @@ Write the introduction. Plan your approach first, then provide the JSON.`;
 
   const scenesSystemPrompt = `You are a mystery writer crafting prose scenes for a detective game. Each scene is what the player reads when they visit a casebook entry.
 
-You are writing ALL scenes for this case in a single pass. Ensure consistency across scenes: if two characters describe the same event, their accounts should align (or deliberately conflict if one is lying). Recurring details (weather, time of day, physical descriptions) must be consistent.
+You are writing ALL scenes for this case in a single pass. Ensure consistency across scenes: if two characters describe the same event, their accounts should align (or deliberately conflict if one is lying/denying). Recurring details (weather, time of day, physical descriptions) must be consistent.
 
 Your response must end with valid JSON: a Record<string, string> mapping entryId to prose scene text.
 
@@ -111,12 +76,14 @@ ${sceneGuidelines}`;
 
   const scenesUserPrompt = `Here is the case context:
 
-Title: ${intro.title}
+Title: ${title}
 Setting: ${template.era}, ${template.date}
 Crime Type: ${template.crimeType}
+Mystery Style: ${template.mysteryStyle}
+Narrative Tone: ${template.narrativeTone}
 
-Introduction:
-${intro.introduction}
+Introduction (already written — maintain consistency with it):
+${introduction}
 
 The story (chronological events):
 ${storyTimeline}
@@ -139,8 +106,6 @@ Provide the JSON mapping entryId -> scene text.`;
 
   return {
     ...state,
-    title: intro.title,
-    introduction: intro.introduction,
     prose: scenes,
   };
 };
@@ -148,6 +113,49 @@ Provide the JSON mapping entryId -> scene text.`;
 // ============================================
 // Helpers
 // ============================================
+
+/**
+ * Returns prose constraints specific to each mystery style. Ensures scenes
+ * are consistent with the structural shape established by the introduction.
+ */
+function getMysteryStyleProseConstraints(mysteryStyle: string): string {
+  switch (mysteryStyle) {
+    case 'isolated':
+      return `Style "isolated" — CONTAINED SETTING:
+- All action takes place in a single building, estate, vessel, or small compound.
+- Scenes should feel claustrophobic: characters are trapped together, tensions run high.
+- Travel between entries is walking down a corridor, crossing a courtyard, or climbing stairs — never hailing a cab or crossing town.
+- Time passes slowly. Hours feel long. The weather outside is mentioned but never experienced.`;
+
+    case 'sprawling':
+      return `Style "sprawling" — WIDE INVESTIGATION:
+- The investigation spans a city or region. Convey a sense of movement and distance between entries.
+- Each entry feels like a different world — the docks vs. the drawing room vs. the courthouse.
+- Time passes at a natural pace. The investigation takes days. Transitions between entries can mention travel.`;
+
+    case 'time-limited':
+      return `Style "time-limited" — URGENCY AND DEADLINE:
+- A ticking clock drives the investigation. Scenes should reinforce urgency: characters are hurried, evasive, or panicked.
+- CRITICAL: Do NOT imply the detective has unlimited time. No "you return the next morning" or "over the following days." Everything happens in a compressed window.
+- Clocks, fading light, and deadline references should appear naturally in scenes.
+- Travel is quick and purposeful — the detective moves fast, not leisurely.`;
+
+    case 'layered':
+      return `Style "layered" — HIDDEN DEPTH:
+- Early scenes should feel routine — almost too easy. The real mystery emerges gradually.
+- Tone shifts subtly across scenes: early entries are matter-of-fact, later entries become more unsettling or surprising.
+- The pacing is deliberate — the detective thinks they're wrapping up, then realizes they've barely started.`;
+
+    case 'parallel':
+      return `Style "parallel" — CONVERGING THREADS:
+- Scenes alternate between two threads. Characters in one thread may not know about the other.
+- Scenes near the convergence point should carry dramatic irony.
+- Pacing is moderate. The detective has time to follow both threads before they merge.`;
+
+    default:
+      return `Ensure scenes are consistent with the mystery style "${mysteryStyle}" in scope, pacing, and spatial constraints.`;
+  }
+}
 
 function buildEntryContext(
   entry: CasebookEntryDraft,
@@ -165,17 +173,16 @@ function buildEntryContext(
 
   return `Entry "${entry.entryId}" (${entry.label}, ${entry.address}):
   Location: ${entry.locationId} — ${location.name} — ${location?.description ?? ''}
-  Accessible from: ${location?.accessibleFrom.map((id) => `${id} — ${locations[id].name}`).join(', ') ?? ''}
-  Visible from: ${location?.visibleFrom.map((id) => `${id} — ${locations[id].name}`).join(', ') ?? ''}
-  Audible from: ${location?.audibleFrom.map((id) => `${id} — ${locations[id].name}`).join(', ') ?? ''}
+  Accessible from: ${location?.accessibleFrom.map((id) => `${id} — ${locations[id]?.name ?? id}`).join(', ') ?? ''}
+  Visible from: ${location?.visibleFrom.map((id) => `${id} — ${locations[id]?.name ?? id}`).join(', ') ?? ''}
+  Audible from: ${location?.audibleFrom.map((id) => `${id} — ${locations[id]?.name ?? id}`).join(', ') ?? ''}
   Characters present: ${presentChars.map((c) => `${c.name} (${c.mysteryRole}, ${c.societalRole}, tone: ${c.tone.register}, vocab: [${c.tone.vocabulary.join(', ')}]${c.tone.quirk ? `, quirk: ${c.tone.quirk}` : ''})`).join('; ') || 'none'}
-  Facts to reveal: ${revealedFacts.map((f) => `${f.factId}: "${f.description}"`).join('; ')}
+  Facts to reveal: ${revealedFacts.map((f) => `${f.factId}: "${f.description}" (veracity: ${f.veracity})`).join('; ')}
   Character knowledge at this entry:
 ${presentChars.map((c) => {
   const relevantKnowledge = entry.revealsFactIds
     .filter((fid) => c.knowledgeState[fid])
     .map((fid) => `${fid}: ${c.knowledgeState[fid]}`);
-  const hides = c.hides.filter((h) => entry.revealsFactIds.includes(h));
-  return `    ${c.name}: knows/suspects [${relevantKnowledge.join(', ')}], hides [${hides.join(', ')}]`;
+  return `    ${c.name}: knowledge [${relevantKnowledge.join(', ')}], motivations [${c.motivations.join('; ')}]`;
 }).join('\n')}`;
 }

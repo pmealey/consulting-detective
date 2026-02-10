@@ -34,17 +34,22 @@ export interface Character {
   /** Brief physical/personality sketch for generation context */
   description: string;
 
-  /** What this character wants -- motivations driving their behavior */
-  wants: string[];
-
-  /** What this character conceals -- factIds or free-text secrets */
-  hides: string[];
+  /**
+   * Freeform narrative motivations: desires, fears, secrets, grudges, loyalties.
+   * Includes both positive drives ("wants to inherit the estate") and concealed
+   * information ("secretly in debt to the victim"). Used by prose generation
+   * for narrative color — not mechanical.
+   */
+  motivations: string[];
 
   /**
    * What this character knows about each fact.
    * Keyed by factId -> their knowledge status.
    * Only facts the character has *some* relationship to need be included;
-   * absent entries are implicitly 'unknown'.
+   * absent entries are implicitly unknown (no awareness).
+   *
+   * Values: 'knows' | 'suspects' | 'hides' | 'denies' | 'believes'
+   * See KnowledgeStatus in fact.ts for semantics.
    */
   knowledgeState: Record<string, KnowledgeStatus>;
 

@@ -20,6 +20,9 @@ erDiagram
     CausalEvent }o--o{ CausalEvent : "causes"
     CausalEvent }o--o{ Fact : "reveals"
 
+    Fact }o--o{ Character : "subjects"
+    Fact }o--o{ Location : "subjects"
+
     Character }o--o{ Fact : "knowledgeState"
 
     CasebookEntry }o--|| Location : "locationId"
@@ -31,18 +34,28 @@ erDiagram
     Location }o--o{ Location : "visibleFrom"
     Location }o--o{ Location : "audibleFrom"
 
-    Question }o--o{ Fact : "answerFactIds"
+    Question ||--o| QuestionAnswer : "answer"
+    QuestionAnswer }o--o{ Fact : "acceptedIds"
+    QuestionAnswer }o--o{ Character : "acceptedIds"
+    QuestionAnswer }o--o{ Location : "acceptedIds"
 ```
+
+Note: `CausalEvent.reveals` is `EventReveal[]` (each with id, audible, visible, physical, subjects). `Fact` has `subjects: string[]` and `veracity`. `Question.answer` is `QuestionAnswer`: `type: 'person'|'location'|'fact'`, optional `factCategory`, and `acceptedIds` (characterIds, locationIds, or factIds).
 
 ### Key Relationships
 
-- **Events -> Characters**: Every event has an agent (who did it) and an involvement map tracking how other characters are connected: participant, witness_direct, witness_visual, witness_auditory, informed_after, or discovered_evidence.
+- **Events -> Characters**: Every event has an agent (who did it) and an involvement map: `agent`, `present`, `witness_visual`, `witness_auditory`, or `discovered_evidence`. (Secondhand knowledge is modeled as separate events, not `informed_after`.)
 - **Events -> Locations**: Every event happened somewhere. Location perception edges (visibleFrom, audibleFrom) and accessibility edges (accessibleFrom) constrain who could have witnessed it.
-- **Events -> Facts**: Events reveal facts to witnesses. This is the bridge between "what happened" and "what's discoverable."
-- **Characters -> Facts**: The knowledge state tracks what each character knows or suspects about each fact. This shapes what they'll say in their casebook scene.
-- **CasebookEntries -> Locations + Characters + Facts**: Entries are the player-facing game mechanic. Each entry takes place at a location, involves certain characters, and reveals specific facts. All entries are gated behind fact discovery (OR-logic via `requiresAnyFact`).
-- **Questions -> Facts**: Each question's `answerFactIds` lists the facts that are acceptable correct answers. The player selects from their discovered facts filtered by `answerCategory`. This is what makes the game work: the player must visit enough entries to discover the answer facts.
-- **Case.optimalPath -> CasebookEntries**: The minimum ordered set of entries that covers all answer facts for all questions. This is the optimal solution path.
+- **Events -> Facts**: Each event has `reveals: EventReveal[]`. Each reveal has an `id` (factId), perception flags (`audible`, `visible`, `physical`), and `subjects` (character/location IDs the fact is about). This determines how different involvement types learn the fact.
+- **Facts**: Each fact has `subjects: string[]` (characterIds and locationIds it is about) and `veracity: 'true' | 'false'`. False facts are discoverable but never correct answers; they model misinformation from characters who deny or believe falsehoods.
+- **Characters -> Facts**: `knowledgeState` maps factId to `KnowledgeStatus`: `knows`, `suspects`, `hides`, `denies`, or `believes`. This shapes what they say in their casebook scene.
+- **CasebookEntries -> Locations + Characters + Facts**: Entries are the player-facing game mechanic. Each entry is gated on discovering any fact that has that entry's subject in its `subjects` (subject-based gating). Entries reveal facts per character knowledge and location physical evidence.
+- **Questions -> Answers**: Each question has `answer: QuestionAnswer` with `type: 'person' | 'location' | 'fact'`. For `person`/`location`, the player selects from discovered subjects; for `fact`, from discovered facts filtered by `factCategory`. `acceptedIds` lists acceptable correct IDs (characterIds, locationIds, or factIds).
+- **Case.optimalPath -> CasebookEntries**: The minimum ordered set of entries that covers all accepted answers for all questions. This is the optimal solution path.
+
+### Fact–Subject Graph
+
+Facts and subjects (characters and locations) form a **bipartite graph**: fact nodes connect to subject nodes via `fact.subjects`. A subject is "discovered" when the player learns any fact that has that subject; discovering a subject can gate casebook entries (each subject typically has an entry). The graph is built programmatically in ComputeFacts (bridge facts connect disconnected components; red herrings add noise). Reachability from introduction facts ensures the case is solvable.
 
 ### What the Player Sees vs. What the Generator Builds
 
@@ -57,62 +70,57 @@ Everything else (events, locations, character knowledge states) is generation sc
 
 ## Generation Pipeline
 
+Step name prefixes: **Generate** — AI (LLM) steps; **Validate** — data-checking (pure logic); **Compute** — algorithmic (pure logic, no LLM); **Store** — persistence.
+
 ```mermaid
 flowchart TD
-    A[Step 1: Select Case Template] --> B[Step 2: Generate Causal Event Chain]
-    B --> C[Step 3: Populate Characters]
-    C --> D[Step 4: Build Location Graph]
-    D --> E[Step 5: Distribute Facts]
-    E --> F[Step 6: Design Casebook Entries]
-    F --> F2[Step 6b: Validate Discovery Graph]
-    F2 -->|valid| G[Step 7: Generate Prose Scenes]
-    F2 -->|invalid, retries left| F
-    G --> H[Step 8: Create Questions]
-    H --> I[Step 9: Compute Optimal Path]
-    I --> J[Step 10: Validate Coherence]
-    J --> K[Step 11: Store in DynamoDB]
-
-    B -->|"events: DAG of what happened"| C
-    C -->|"characters: know/want/hide + roleMapping"| D
-    D -->|"locations: spatial + perception"| E
-    E -->|"facts + introductionFactIds"| F
-    F -->|"casebook: gated entries"| F2
-    F2 -->|"discoveryGraphResult"| G
-    G -->|"prose scenes + introduction"| H
-    H -->|"questions: answerFactIds + answerCategory"| I
-    I -->|"optimalPath: gate-feasible entries"| J
+    A[1. GenerateTemplate] --> B[2. GenerateEvents]
+    B --> B2[2b. ValidateEvents]
+    B2 --> C[3. ComputeEventKnowledge]
+    C --> D[4. GenerateCharacters]
+    D --> D2[4b. ValidateCharacters]
+    D2 --> E[5. GenerateLocations]
+    E --> E2[5b. ValidateLocations]
+    E2 --> F[6. ComputeFacts]
+    F --> G[7. GenerateFacts]
+    G --> G2[7b. ValidateFacts]
+    G2 --> H[8. GenerateIntroduction]
+    H --> I[9. GenerateCasebook]
+    I --> I2[9b. ValidateCasebook]
+    I2 --> J[10. GenerateProse]
+    J --> K[11. GenerateQuestions]
+    K --> K2[11b. ValidateQuestions]
+    K2 --> L[12. ComputeOptimalPath]
+    L --> M[13. StoreCase]
 ```
 
 ### Pipeline Steps
 
-1. **Select Case Template**: Choose a parameterized crime type (theft-for-debt, jealousy murder, accidental death covered up, etc.) with required event slots and character roles. Cases can be set in any era and setting (Victorian London, 1920s New York, a future orbital station, etc.).
+1. **GenerateTemplate**: Choose a parameterized crime type and setting. Optionally define mystery style and narrative tone to guide later steps.
 
-2. **Generate Causal Event Chain**: Fill the template's event DAG with specific details. Each event gets an agent, location, timestamp, and necessity. Required events form the spine; other events add texture. The DAG's `causes` edges define what-leads-to-what. Events describe things that *happened* in the world — never investigation steps.
+2. **GenerateEvents** + **ValidateEvents**: Fill the template's event DAG. Each event has `reveals: EventReveal[]` (id, audible, visible, physical, subjects). Involvement types: `agent`, `present`, `witness_visual`, `witness_auditory`, `discovered_evidence`. Validation checks structure and references; retries on failure.
 
-3. **Populate Characters**: Assign characters to event agent slots. For each character, determine: what they know (knowledgeState: `knows` or `suspects`), what they want, what they hide, and how they speak (tone). Also produces a `roleMapping` (roleId -> characterId) used to replace role placeholders in the event chain with real character IDs. Characters not directly involved in events can serve as witnesses, red herrings, or color. `currentStatus` (e.g. "deceased", "missing") guides who can be met during investigation.
+3. **ComputeEventKnowledge** (programmatic): From events, build role knowledge baselines and location reveals. Agent/present learn all reveals; witness_visual/auditory learn by perception flags; discovered_evidence learns physical reveals. Location reveals account for cleanup (later event at same location can remove physical evidence).
 
-4. **Build Location Graph**: Create the spatial world. Assign events to locations. Define accessibility (accessibleFrom) and perception edges (visibleFrom, audibleFrom). Location types are freeform strings (e.g. "building", "room", "campsite", "street"). Locations include where characters can be found during the investigation, and where witnesses were positioned when they observed events.
+4. **GenerateCharacters** + **ValidateCharacters**: Assign characters to roles. Receives computed role knowledge; AI may change entries to `suspects`, `hides`, `denies`, or add `believes` for false beliefs. Produces roleMapping. Validation checks knowledge state enum and involvement types.
 
-5. **Distribute Facts**: Extract facts from events and character states. Tag each fact with a category (motive, means, opportunity, alibi, relationship, timeline, physical_evidence, background, person, place). Person and place facts are identity atoms that serve as gate keys for casebook entries. Select 2-4 introduction facts that seed the investigation.
+5. **GenerateLocations** + **ValidateLocations**: Build the spatial world (accessibility, perception edges). Receives location reveals from ComputeEventKnowledge. Validation checks references.
 
-6. **Design Casebook Entries**: Create the player-facing address book. Every entry is gated — hidden until the player discovers any one of its `requiresAnyFact` facts (OR-logic). Person/place identity facts serve as gate keys. The co-discovery rule ensures that if an entry reveals a fact mentioning a person/place, it also reveals that entity's identity fact. Important facts should be available at multiple entries for different solving paths.
+6. **ComputeFacts** (programmatic): Build the fact–subject graph. Collect true fact placeholders from event reveals; create false fact placeholders from denials; detect disconnected components and add bridge facts; add red herring placeholders. Outputs fact placeholders (subjects, veracity, source) and the bipartite graph.
 
-    6b. **Validate Discovery Graph**: Pure computation (no LLM). BFS over the bipartite facts ↔ entries graph starting from introduction facts, verifying all facts and entries are reachable. If validation fails, DesignCasebook is retried with error context (up to 2 retries).
+7. **GenerateFacts** + **ValidateFacts**: AI expands each placeholder into a full fact (factId, description, category). Subjects and veracity are already set. Validation checks categories and subject referential integrity.
 
-7. **Generate Prose Scenes**: Generated in two LLM calls: one for the introduction and title, one for all casebook scenes (ensures cross-scene coherence). Scenes are filtered through present characters' knowledge states and tone profiles. Characters reveal facts they `know` about, hint at facts they `suspect`, and conceal or misdirect about facts they `hide`. Location perception edges inform scene descriptions.
+8. **GenerateIntroduction**: AI selects 2–4 introduction fact IDs that form a coherent hook and seed discovery, and writes the introduction prose and title. Introduction is written here; GenerateProse only does casebook scenes.
 
-8. **Create Questions**: Design 4-8 end-of-case quiz questions. The player answers by selecting a fact from their discovered facts, filtered by the question's `answerCategory`. Each question's `answerFactIds` lists acceptable correct answers (all must share the same fact category). Questions are vague and non-spoiling — they don't name specific characters or locations.
+9. **GenerateCasebook** + **ValidateCasebook**: Programmatic structure: each subject (character or location) becomes an entry; gating is by facts whose subjects include that subject; reveals come from character knowledge and location reveals. AI polishes labels, addresses, who is present. Validation: BFS reachability from introduction facts.
 
-9. **Compute Optimal Path**: Solve the set-cover problem: find the minimum ordered set of casebook entries that reveals all answer facts for all questions, respecting gate constraints (each entry's gate facts must be discoverable before visiting it). This becomes the optimal solution path and the scoring baseline.
+10. **GenerateProse**: Scenes only (introduction already written). One LLM call for all casebook scenes. Context includes knowledge states (knows, suspects, hides, denies, believes) and fact veracity.
 
-10. **Validate Coherence**: Check that:
-    - Every event has a valid agent and location
-    - Every casebook entry references valid locations, characters, and facts
-    - `introductionFactIds` and `requiresAnyFact` reference valid factIds
-    - Every question's `answerFactIds` are in the discovery-graph reachable set and their categories match `answerCategory`
-    - The optimal path is gate-feasible and covers all answer facts
-    - Character knowledge states are consistent with events
-    - Location graph integrity (valid references in accessibleFrom)
+11. **GenerateQuestions** + **ValidateQuestions**: Design 4–8 quiz questions. Answer structure: `type: 'person' | 'location' | 'fact'`, optional `factCategory`, `acceptedIds`. False facts are excluded from answer options. Validation checks answer structure and references.
+
+12. **ComputeOptimalPath**: Set-cover: minimum ordered entries that cover all question answers (acceptedIds), respecting gates. Absorbs coherence checks (path exists, gate-feasible, covers answers).
+
+13. **StoreCase**: Assemble and persist the case (events with EventReveal[], facts with subjects/veracity, characters with full KnowledgeStatus, questions with new answer structure).
 
 ---
 

@@ -11,7 +11,7 @@ import {
  * with containment hierarchy and perception edges (visibleFrom, audibleFrom).
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template, events, characters } = state;
+  const { input, template, events, characters, computedKnowledge } = state;
 
   if (!template) throw new Error('Step 4 requires template from step 1');
   if (!events) throw new Error('Step 4 requires events from step 2');
@@ -21,6 +21,8 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   const locationPlaceholders = [...new Set(Object.values(events).map((e) => e.location))];
 
   const systemPrompt = `You are a location designer for a mystery game. Given a case template, event chain, and characters, you create a coherent spatial world.
+
+Involvement types in events: agent (performed the event), present (directly present and observed), witness_visual (saw from another location), witness_auditory (heard from another location), discovered_evidence (found physical evidence later). Use these when reasoning about who could have witnessed what.
 
 First, briefly reason through the spatial layout: how buildings relate to each other, what sight lines and sound carries exist, and how this affects who witnessed what. Then provide the JSON.
 
@@ -65,6 +67,8 @@ ${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.my
 
 Event Involvement Details:
 ${Object.values(events).map((e) => `  ${e.eventId}: ${JSON.stringify(e.involvement)}`).join('\n')}
+${computedKnowledge?.locationReveals && Object.keys(computedKnowledge.locationReveals).length > 0 ? `
+Physical evidence by location:\n${Object.entries(computedKnowledge.locationReveals).map(([locId, factIds]) => `  ${locId}: ${factIds.join(', ')}`).join('\n')}` : ''}
 
 Create the full location graph. Every event location placeholder must map to a concrete location. Add additional locations for atmosphere. Think through the spatial relationships first, then provide the JSON.${
     locationValidationResult && !locationValidationResult.valid

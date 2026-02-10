@@ -81,14 +81,22 @@ export function CasePage() {
           // Check for existing session
           const existing = getSession(caseDate);
           const introIds = res.data.introductionFactIds ?? [];
+          // Collect subjects from introduction facts
+          const introSubjects = [...new Set(
+            introIds.flatMap((fid) => res.data.facts[fid]?.subjects ?? []),
+          )];
           if (existing) {
-            // Ensure intro facts are in discoveredFacts (merge for old saves)
+            // Ensure intro facts and subjects are in session (merge for old saves)
             const mergedFacts = [...new Set([...introIds, ...existing.discoveredFacts])];
-            const sessionToUse =
-              mergedFacts.length !== existing.discoveredFacts.length
-                ? { ...existing, discoveredFacts: mergedFacts }
-                : existing;
-            if (sessionToUse !== existing) saveSession(sessionToUse);
+            const existingSubjects = existing.discoveredSubjects ?? [];
+            const mergedSubjects = [...new Set([...introSubjects, ...existingSubjects])];
+            const needsUpdate =
+              mergedFacts.length !== existing.discoveredFacts.length ||
+              mergedSubjects.length !== existingSubjects.length;
+            const sessionToUse = needsUpdate
+              ? { ...existing, discoveredFacts: mergedFacts, discoveredSubjects: mergedSubjects }
+              : existing;
+            if (needsUpdate) saveSession(sessionToUse);
             setSession(sessionToUse);
             if (existing.completedAt) {
               // Already completed -- show investigation with answers in Questions card
@@ -99,8 +107,8 @@ export function CasePage() {
               setPhase('investigation');
             }
           } else {
-            // No session yet -- create one seeded with intro facts
-            setSession(createSession(caseDate, introIds));
+            // No session yet -- create one seeded with intro facts and subjects
+            setSession(createSession(caseDate, introIds, introSubjects));
             setPhase('investigation');
           }
         } else {
@@ -127,10 +135,17 @@ export function CasePage() {
           (fid) => !session.discoveredFacts.includes(fid),
         );
 
+        // Extract subjects from newly discovered facts
+        const existingSubjects = new Set(session.discoveredSubjects ?? []);
+        const newSubjects = newFacts.flatMap(
+          (fid) => gameCase.facts[fid]?.subjects ?? [],
+        ).filter((s) => !existingSubjects.has(s));
+
         const updated: PlayerSession = {
           ...session,
           visitedEntries: [...session.visitedEntries, entryId],
           discoveredFacts: [...session.discoveredFacts, ...newFacts],
+          discoveredSubjects: [...(session.discoveredSubjects ?? []), ...newSubjects],
         };
         setSession(updated);
         saveSession(updated);
@@ -384,6 +399,9 @@ export function CasePage() {
                   <FactsList
                     facts={gameCase.facts}
                     discoveredFactIds={session?.discoveredFacts ?? []}
+                    characters={gameCase.characters}
+                    locations={gameCase.locations}
+                    discoveredSubjectIds={session?.discoveredSubjects ?? []}
                   />
                 </div>
               </div>
@@ -402,7 +420,10 @@ export function CasePage() {
                     <QuestionForm
                       questions={gameCase.questions}
                       facts={gameCase.facts}
+                      characters={gameCase.characters}
+                      locations={gameCase.locations}
                       discoveredFactIds={session?.discoveredFacts ?? []}
+                      discoveredSubjectIds={session?.discoveredSubjects ?? []}
                       onSubmit={handleSubmitAnswers}
                     />
                   )}

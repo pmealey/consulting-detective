@@ -15,7 +15,7 @@ A log of specific design choices and their rationale. Each entry records the dec
 - Leak the answer into the data structure
 - Prevent cases where the "culprit" is ambiguous or where the questions aren't about guilt at all (e.g. "What was hidden in the safe?")
 
-Instead, guilt is emergent: a Question asks "Who is responsible for the victim's death?", its `answerFactIds` point to the person fact for the culprit, and the player selects it from their discovered facts filtered by `answerCategory: "person"`. The data model supports any narrative conclusion the questions want to probe.
+Instead, guilt is emergent: a Question asks "Who is responsible for the victim's death?", its `answer` has `type: 'person'` and `acceptedIds: [characterId of the culprit]`, and the player selects that character from their discovered subjects. The data model supports any narrative conclusion the questions want to probe.
 
 ---
 
@@ -52,15 +52,7 @@ The split enables:
 
 **Alternatives considered**: Explicitly marking red herring entries during generation.
 
-**Rationale**: "Red herring" is a derived property, not an intrinsic one. A casebook entry is a red herring if the intersection of its `revealsFactIds` with the union of all `question.answerFactIds` is empty. This can be computed at validation time:
-
-```typescript
-const answerFacts = new Set(
-  case.questions.flatMap(q => q.answerFactIds)
-);
-const isRedHerring = (entry: CasebookEntry) =>
-  entry.revealsFactIds.every(fid => !answerFacts.has(fid));
-```
+**Rationale**: "Red herring" is a derived property, not an intrinsic one. A casebook entry is a red herring if it doesn't help answer any question: for fact-type answers, none of its revealed fact IDs are in that question's `answer.acceptedIds`; for person/location-type answers, none of its revealed facts have a subject in `answer.acceptedIds`. So the set of "critical" IDs (factIds, characterIds, locationIds that are correct answers) can be computed from all questions' `answer.acceptedIds`, and an entry is a red herring if it reveals no fact that is in that set and no fact whose subjects intersect that set (for person/location). Computing it on demand keeps it correct regardless of answer structure.
 
 Storing it would create a maintenance burden: if questions change, the flag could become stale. Computing it on demand is trivial and always correct.
 
@@ -94,12 +86,12 @@ Arrays are kept where they're appropriate:
 
 The typed `InvolvementType` is richer than flat participant/witness arrays because it captures *how* a character is connected, which directly shapes scene generation:
 - `agent`: performed the action -- can describe it from their own perspective
-- `participant`: directly involved -- knows firsthand details
-- `witness_direct`: was present and observed the event (generic witness)
+- `present`: directly involved or present and observed the event -- knows firsthand details
 - `witness_visual`: saw it happen from another location -- can describe what they saw but may have misinterpreted
 - `witness_auditory`: heard it from another location -- can report sounds but not sights
-- `informed_after`: learned secondhand -- has filtered/distorted information
 - `discovered_evidence`: found physical traces later -- knows the aftermath but not the event itself
+
+(Secondhand knowledge is modeled as separate events, not an `informed_after` involvement type.)
 
 The location graph's perception edges (`visibleFrom`, `audibleFrom`) inform the involvement type during generation (a character at a `visibleFrom` location gets `witness_visual`), but the computed result is stored on the event for direct access.
 
@@ -157,3 +149,83 @@ Separating persistent resources into their own stack solves this:
 - `npm run destroy` targets only the application stack by default, preventing accidental data loss.
 
 The rule is simple: if a resource holds data you can't regenerate, it goes in the infrastructure stack. Everything else goes in the application stack. The infrastructure stack exports resource references (table ARN, etc.) and the application stack receives them as constructor props.
+
+---
+
+## Subjects Over Identity Categories
+
+**Decision**: Facts have `subjects: string[]` (characterIds and locationIds the fact is about) instead of separate `person` and `place` fact categories.
+
+**Alternatives considered**: Dedicated "person" and "place" fact categories as identity atoms that gate casebook entries.
+
+**Rationale**: Person/place categories conflated "what this fact is about" with "what category of fact it is." A fact can be *about* a person (e.g. "The butler had a motive") without being an "identity" fact. The subject list is explicit: every fact declares which characters and locations it concerns. Gating and discovery use the same mechanism — discovering any fact that has subject X in its `subjects` unlocks that subject's casebook entry. Categories (motive, means, opportunity, etc.) describe the *kind* of information; subjects describe *what* it's about.
+
+---
+
+## Enriched Event Reveals
+
+**Decision**: `CausalEvent.reveals` is `EventReveal[]`, where each reveal has `id`, `audible`, `visible`, `physical`, and `subjects`, instead of a plain `string[]` of fact IDs.
+
+**Alternatives considered**: Flat list of fact IDs; deriving perception from event location and involvement only.
+
+**Rationale**: Different involvement types learn facts through different channels. An agent or someone present learns everything; a visual witness only learns reveals with `visible: true`; an auditory witness only `audible: true`; someone who discovers evidence only `physical: true`. Storing these flags on each reveal lets ComputeEventKnowledge build role and location knowledge programmatically without re-interpreting prose. `subjects` on the reveal ties the fact placeholder to role/location placeholders before characters and locations exist.
+
+---
+
+## Knowledge State Expansion
+
+**Decision**: `KnowledgeStatus` includes `hides`, `denies`, and `believes` in addition to `knows` and `suspects`.
+
+**Alternatives considered**: Only `knows` and `suspects`; freeform strings.
+
+**Rationale**: Characters can actively conceal (`hides`), contradict the truth (`denies`, with a corresponding false fact they `believes`), or confidently state false information (`believes`). These states drive prose generation (deflection, denial, confident misinformation) and feed into ComputeFacts (denials create false fact placeholders; bridge facts and red herrings use the same knowledge-state machinery). A fixed enum keeps validation and downstream logic simple while covering the needed narrative behaviors.
+
+---
+
+## Programmatic Casebook Construction
+
+**Decision**: Casebook structure is largely programmatic: each subject (character or location) becomes an entry; gating and reveals are derived from the fact–subject graph and character knowledge / location reveals. AI polishes labels, addresses, and who is present.
+
+**Alternatives considered**: Fully AI-designed casebook; fully programmatic with no AI polish.
+
+**Rationale**: Pure AI design risked inconsistent gating (entries unreachable from introduction facts) and extra validation retries. Pure programmatic lacked narrative flair (addresses, era-appropriate labels, which characters appear where). The hybrid: ComputeFacts and the graph guarantee connectivity; GenerateCasebook uses that structure and lets the AI fill in presentation and narrative choices. ValidateCasebook still runs a reachability check but failures should be rare.
+
+---
+
+## Removal of `informed_after` Involvement
+
+**Decision**: `InvolvementType` no longer includes `informed_after`. Secondhand knowledge is modeled as separate events.
+
+**Alternatives considered**: Keeping `informed_after` and having ComputeEventKnowledge treat it as a diluted knowledge source.
+
+**Rationale**: "Learned secondhand" is itself a narrative event (e.g. "Character A told Character B about the argument"). Modeling it as a distinct event keeps the causal DAG accurate and lets reveals and perception be explicit for that event. The involvement set stays about *direct* connection to an event (agent, present, witness_visual, witness_auditory, discovered_evidence), simplifying both prompts and the event-knowledge computation.
+
+---
+
+## Compute Prefix Convention
+
+**Decision**: Pipeline steps that are pure logic (no LLM) are named with a **Compute** prefix: ComputeEventKnowledge, ComputeFacts, ComputeOptimalPath.
+
+**Alternatives considered**: "Build," "Derive," or no special prefix.
+
+**Rationale**: The pipeline mixes AI steps (Generate*, Validate*) and deterministic steps. Naming the latter "Compute" makes it obvious they have no model calls, no retries for creativity, and deterministic outputs given inputs. This helps with debugging, cost attribution, and choosing which steps need validation loops.
+
+---
+
+## GenerateIntroduction Rationale
+
+**Decision**: A dedicated step, GenerateIntroduction, runs after GenerateFacts and before GenerateCasebook. It selects introduction fact IDs and writes the introduction prose and title.
+
+**Alternatives considered**: Selecting introduction facts inside ComputeFacts or GenerateFacts; writing the introduction in the same step as casebook scenes (GenerateProse).
+
+**Rationale**: Introduction facts must form a coherent opening hook and seed enough subjects to unlock 2–3 entries — a narrative judgment. ComputeFacts is programmatic and doesn't choose "which facts tell the best story." GenerateFacts only expands placeholders. So selection belongs in an AI step that sees the full fact set, characters, and graph. Writing the introduction prose in that same step keeps tone and content aligned; GenerateProse then only does casebook scenes, with one LLM call for cross-scene coherence.
+
+---
+
+## Question Answer Types
+
+**Decision**: Questions use `answer: QuestionAnswer` with `type: 'person' | 'location' | 'fact'`, optional `factCategory`, and `acceptedIds` (characterIds, locationIds, or factIds depending on type).
+
+**Alternatives considered**: All questions answered by selecting a fact; separate question types with different UI only.
+
+**Rationale**: Some questions ask "who" or "where" — the player should choose from discovered people or places, not from a fact description that *mentions* them. Using `type` and `acceptedIds` lets one answer structure support person, location, and fact answers. The UI shows the appropriate list (discovered subjects vs. discovered facts filtered by category). Scoring and optimal path treat all three uniformly: an entry satisfies a question if the facts it reveals (and their subjects) imply one of the accepted IDs.

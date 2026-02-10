@@ -5,33 +5,37 @@ import {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 8: Generate Questions
+ * Pipeline Step 10: Generate Questions
  *
  * Designs 4-8 end-of-case quiz questions that require the player
  * to connect facts discovered across multiple casebook entries.
+ * Answer types: person (characterIds), location (locationIds), fact (factIds + factCategory).
+ * False facts (veracity: "false") are excluded from acceptable answers.
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
   const { input, template, events, characters, facts, casebook } = state;
 
-  if (!template) throw new Error('Step 8 requires template from step 1');
-  if (!events) throw new Error('Step 8 requires events from step 2');
-  if (!characters) throw new Error('Step 8 requires characters from step 3');
-  if (!facts) throw new Error('Step 8 requires facts from step 5');
-  if (!casebook) throw new Error('Step 8 requires casebook from step 6');
+  if (!template) throw new Error('GenerateQuestions requires template from step 1');
+  if (!events) throw new Error('GenerateQuestions requires events from step 2');
+  if (!characters) throw new Error('GenerateQuestions requires characters from step 3');
+  if (!facts) throw new Error('GenerateQuestions requires facts from step 6');
+  if (!casebook) throw new Error('GenerateQuestions requires casebook from step 8');
 
   const difficulty = template.difficulty;
 
   const factCategories = [
     'motive', 'means', 'opportunity', 'alibi',
     'relationship', 'timeline', 'physical_evidence', 'background',
-    'person', 'place',
   ];
 
   const systemPrompt = `You are a quiz designer for a detective mystery game. You create end-of-case questions that test whether the player has found and connected the right evidence.
 
-The player answers questions by SELECTING a fact from their discovered facts, filtered by the question's answer category. This means the answer is always a single fact the player picks from a list — not free text. However, some questions may have multiple facts that could reasonably be considered correct.
+Questions have three answer types:
+- **"person"**: The player selects from discovered characters. Use for "Who did X?" questions.
+- **"location"**: The player selects from discovered locations. Use for "Where did X happen?" questions.
+- **"fact"**: The player selects from discovered facts filtered by factCategory. Use for motive, means, evidence questions.
 
-First, briefly reason through what the key deductions are and which facts could answer each question. Then provide the JSON.
+First, briefly reason through what the key deductions are and which answers could satisfy each question. Then provide the JSON.
 
 Your response must end with valid JSON: an array of Question objects.
 
@@ -39,40 +43,40 @@ Each question must match this schema:
 {
   "questionId": string,          // e.g. "q_01_who"
   "text": string,                // the question (see guidelines on vagueness below)
-  "answerFactIds": string[],     // factIds that are acceptable correct answers (at least 1; all must be existing factIds from the provided facts list)
-  "answerCategory": string,      // fact category the player selects from (must match the category of ALL referenced facts); one of: ${factCategories.join(', ')}
+  "answer": {
+    "type": "person" | "location" | "fact",
+    "factCategory": string,      // REQUIRED when type is "fact"; one of: ${factCategories.join(', ')}
+    "acceptedIds": string[]      // at least 1; characterIds for "person", locationIds for "location", factIds for "fact"
+  },
   "points": number,              // point value (5, 10, 15, or 20)
   "difficulty": "easy" | "medium" | "hard"
 }
 
-## ANSWER CATEGORY RULES
+## ANSWER TYPE RULES
 
-The player answers each question by selecting a fact from their discovered facts, filtered to only show facts matching the question's \`answerCategory\`. This means the category determines what list the player picks from. Choose the category that makes the answer a meaningful selection from a non-trivial list.
-
-**Category-to-question-type mapping:**
-
-| Question asks about... | answerCategory | answerFactIds should be... | Points |
+| Question asks about... | answer.type | acceptedIds should be... | Points |
 |---|---|---|---|
-| Identity of a person (culprit, accomplice, key witness) | \`person\` | Person identity fact(s) for that character | 15-20 |
-| A key location (crime scene, hiding place, meeting point) | \`place\` | Place identity fact(s) for that location | 5-10 |
-| Why someone did something (motive, grudge, desire) | \`motive\` | The specific motive fact(s) | 10-15 |
-| How the crime was committed (method, weapon, technique) | \`means\` | The specific means fact(s) | 10-15 |
-| When/whether someone had the chance to act | \`opportunity\` | The specific opportunity fact(s) | 10-15 |
-| A connection between people or entities | \`relationship\` | The specific relationship fact(s) | 5-10 |
-| When something happened or sequence of events | \`timeline\` | The specific timeline fact(s) | 5-10 |
-| Physical evidence (object, trace, document) | \`physical_evidence\` | The specific evidence fact(s) | 5-10 |
+| Identity of a person (culprit, accomplice, key witness) | \`person\` | characterId(s) for that person | 15-20 |
+| A key location (crime scene, hiding place, meeting point) | \`location\` | locationId(s) for that place | 5-10 |
+| Why someone did something (motive, grudge, desire) | \`fact\` (factCategory: "motive") | The specific motive factId(s) | 10-15 |
+| How the crime was committed (method, weapon, technique) | \`fact\` (factCategory: "means") | The specific means factId(s) | 10-15 |
+| When/whether someone had the chance to act | \`fact\` (factCategory: "opportunity") | The specific opportunity factId(s) | 10-15 |
+| A connection between people or entities | \`fact\` (factCategory: "relationship") | The specific relationship factId(s) | 5-10 |
+| When something happened or sequence of events | \`fact\` (factCategory: "timeline") | The specific timeline factId(s) | 5-10 |
+| Physical evidence (object, trace, document) | \`fact\` (factCategory: "physical_evidence") | The specific evidence factId(s) | 5-10 |
 
-CRITICAL: "Who" questions MUST use \`answerCategory: "person"\` with person identity facts as answers — NOT motive, relationship, or other facts that happen to name the person. The player is selecting from a list of people, not a list of motives. Similarly, "Where" questions MUST use \`answerCategory: "place"\` with place identity facts.
+CRITICAL: "Who" questions MUST use \`answer.type: "person"\` with characterIds — NOT fact type with motive or relationship facts. The player is selecting from a list of people. Similarly, "Where" questions MUST use \`answer.type: "location"\` with locationIds.
 
 ## OTHER GUIDELINES
 
 - Create 4-8 questions depending on difficulty level.
 - Questions should progress from easier to harder.
-- Every factId in answerFactIds MUST reference an actual factId from the provided facts list.
-- Every factId in answerFactIds MUST share the same category, which MUST match answerCategory.
-- If multiple facts could reasonably answer the question, include all of them in answerFactIds. The first entry should be the single best answer; additional entries are acceptable alternatives.
-- CRITICAL: question text must be VAGUE and NON-SPOILING. Do NOT name specific characters, locations, or details that would give away answers to other questions. For example, instead of "Who killed Lord Ashworth at the docks?" write "Who is responsible for the victim's death?" — the player already knows the case context.
-- Try to cover a variety of different facts and categories across questions. Don't make every question a "Who" question.
+- For "person" answers: every ID in acceptedIds MUST be a valid characterId from the provided characters list.
+- For "location" answers: every ID in acceptedIds MUST be a valid locationId from the provided locations list.
+- For "fact" answers: every ID in acceptedIds MUST be a valid factId from the provided facts list, and all must share the specified factCategory. Do NOT include false facts (veracity: "false") as accepted answers.
+- If multiple answers could reasonably be correct, include all of them in acceptedIds.
+- CRITICAL: question text must be VAGUE and NON-SPOILING. Do NOT name specific characters, locations, or details that would give away answers to other questions.
+- Try to cover a variety of answer types. Don't make every question a "Who" question.
 - Point values: easy=5-10, medium=10-15, hard=15-20.`;
 
   const questionValidationResult = state.questionValidationResult;
@@ -85,16 +89,19 @@ Difficulty: ${difficulty}
 The story (what actually happened):
 ${Object.values(events).sort((a, b) => a.timestamp - b.timestamp).map((e) => `  ${e.timestamp}. ${e.description}`).join('\n')}
 
-Characters:
-${Object.values(characters).map((c) => `  - ${c.name} (${c.mysteryRole}, ${c.societalRole}): wants=[${c.wants.join('; ')}], hides=[${c.hides.join('; ')}]`).join('\n')}
+Characters (valid characterIds for "person" answer type):
+${Object.values(characters).map((c) => `  - ${c.characterId}: ${c.name} (${c.mysteryRole}, ${c.societalRole})`).join('\n')}
 
-Available facts (these are the ONLY valid values for answerFactIds entries):
-${Object.values(facts).map((f) => `  - ${f.factId} [${f.category}]: ${f.description}`).join('\n')}
+Locations (valid locationIds for "location" answer type):
+${Object.values(state.locations!).map((l) => `  - ${l.locationId}: ${l.name} (${l.type})`).join('\n')}
+
+Available facts (valid factIds for "fact" answer type — do NOT use false facts as answers):
+${Object.values(facts).filter((f) => f.veracity !== 'false').map((f) => `  - ${f.factId} [${f.category}]: ${f.description}`).join('\n')}
 
 Where facts are found (casebook entries):
 ${Object.values(casebook).map((e) => `  - ${e.label}: reveals [${e.revealsFactIds.join(', ')}]`).join('\n')}
 
-Design the quiz. Every entry in answerFactIds must be one of the factIds listed above, and answerCategory must match those facts' category. Think through the key deductions first, then provide the JSON array.${
+Design the quiz. For "person" answers, use characterIds. For "location" answers, use locationIds. For "fact" answers, use factIds and set factCategory. Think through the key deductions first, then provide the JSON array.${
     questionValidationResult && !questionValidationResult.valid
       ? `
 

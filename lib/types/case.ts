@@ -7,14 +7,9 @@
  * facts, and the end-of-case quiz.
  *
  * The Case type is the "assembled product" of the generation pipeline:
- * 1. Generate the causal event spine
- * 2. Populate characters around the events
- * 3. Build the world location graph
- * 4. Distribute facts across casebook entries
- * 5. Generate prose scenes for each entry
- * 6. Create quiz questions that require connecting facts
- * 7. Compute the optimal path
- * 8. Validate coherence
+ * template → events → characters → locations → facts → introduction →
+ * casebook → prose → questions → compute optimal path (includes coherence
+ * checks) → store.
  */
 
 import type { CausalEvent } from './event';
