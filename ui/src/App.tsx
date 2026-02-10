@@ -16,7 +16,7 @@ function AppLayout() {
               <h1 className="text-2xl font-serif font-bold tracking-tight">
                 Consulting Detective
               </h1>
-              <p className="text-sm text-stone-500">A daily mystery to solve</p>
+              <p className="text-sm text-stone-500">A weekly mystery to solve</p>
             </Link>
           </div>
         </header>
