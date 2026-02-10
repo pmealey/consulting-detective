@@ -652,8 +652,32 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     validateQuestions.next(checkQuestions);
     computeOptimalPath.next(storeCase);
 
-    // Pipeline entry: GenerateTemplate → InitEventsRetries → (GenerateEvents → ValidateEvents → CheckEvents)
-    const pipelineDefinition = generateTemplate.next(initEventsRetries);
+    // -- Resume from step: when input includes startFromStep + partial state, jump to that step --
+    const invalidResumeStep = new sfn.Fail(this, 'InvalidResumeStep', {
+      cause: 'startFromStep must be one of: generateEvents, computeEventKnowledge, generateCharacters, generateLocations, computeFacts, generateFacts, generateIntroduction, generateCasebook, generateProse, generateQuestions',
+      error: 'InvalidResumeStep',
+    });
+
+    const resumeFromStep = new sfn.Choice(this, 'ResumeFromStep')
+      .when(sfn.Condition.stringEquals('$.startFromStep', 'generateEvents'), initEventsRetries)
+      .when(sfn.Condition.stringEquals('$.startFromStep', 'computeEventKnowledge'), computeEventKnowledge)
+      .when(sfn.Condition.stringEquals('$.startFromStep', 'generateCharacters'), initGenerateCharactersRetries)
+      .when(sfn.Condition.stringEquals('$.startFromStep', 'generateLocations'), initGenerateLocationsRetries)
+      .when(sfn.Condition.stringEquals('$.startFromStep', 'computeFacts'), computeFacts)
+      .when(sfn.Condition.stringEquals('$.startFromStep', 'generateFacts'), initGenerateFactsRetries)
+      .when(sfn.Condition.stringEquals('$.startFromStep', 'generateIntroduction'), generateIntroduction)
+      .when(sfn.Condition.stringEquals('$.startFromStep', 'generateCasebook'), initGenerateCasebookRetries)
+      .when(sfn.Condition.stringEquals('$.startFromStep', 'generateProse'), generateProse)
+      .when(sfn.Condition.stringEquals('$.startFromStep', 'generateQuestions'), initGenerateQuestionsRetries)
+      .otherwise(invalidResumeStep);
+
+    const routeByResume = new sfn.Choice(this, 'RouteByResume')
+      .when(sfn.Condition.isPresent('$.startFromStep'), resumeFromStep)
+      .otherwise(generateTemplate);
+
+    // Pipeline entry: RouteByResume → (GenerateTemplate or jump to startFromStep) → ... → StoreCase
+    const pipelineDefinition = routeByResume;
+    generateTemplate.next(initEventsRetries);
 
     // Continue after checkCasebookValidation (valid) → generateProse → InitQuestionsRetries → GenerateQuestions → ...
     generateProse.next(initGenerateQuestionsRetries);

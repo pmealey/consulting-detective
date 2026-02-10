@@ -70,6 +70,13 @@ export interface CaseGenerationState {
   // -- Input (always present after trigger) --
   input: GenerateCaseInput;
 
+  /**
+   * When starting an execution with partial state (retry/resume), set this to
+   * the first step to run. The state machine will jump to that step and continue.
+   * Omitted for normal runs.
+   */
+  startFromStep?: GenerationStep;
+
   // -- Step 1: Generate Template --
   template?: CaseTemplate;
 
