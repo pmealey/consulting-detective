@@ -6,7 +6,7 @@ import {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 3: Populate Characters
+ * Pipeline Step 3: Generate Characters
  *
  * Takes the template's character roles and the event chain, then creates
  * fully fleshed-out characters with names, personalities, knowledge states,
@@ -101,7 +101,7 @@ ${characterValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
 
   const { data: result } = await callModel(
     {
-      stepName: 'populateCharacters',
+      stepName: 'generateCharacters',
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,

@@ -5,7 +5,7 @@ import {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 1: Select Case Template
+ * Pipeline Step 1: Generate Template
  *
  * Given difficulty + optional crime type, generates a template:
  * crime type, required event slots, character roles, era/setting.
@@ -83,7 +83,7 @@ Think through your creative choices first, then provide the JSON object.`;
 
   const { data: template } = await callModel(
     {
-      stepName: 'selectTemplate',
+      stepName: 'generateTemplate',
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,

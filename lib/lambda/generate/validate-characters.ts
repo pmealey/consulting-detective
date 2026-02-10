@@ -4,7 +4,7 @@ import type {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 3b: Validate Characters (after PopulateCharacters)
+ * Pipeline Step 3b: Validate Characters (after GenerateCharacters)
  *
  * Pure logic — no LLM call. Validates that event character references
  * are valid after roleIds have been remapped to characterIds:

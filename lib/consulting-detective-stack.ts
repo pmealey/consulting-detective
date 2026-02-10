@@ -104,8 +104,8 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       memorySize: 2048,
     };
 
-    const selectTemplateHandler = new nodejs.NodejsFunction(this, 'SelectTemplateHandler', {
-      entry: join(__dirname, 'lambda/generate/select-template.ts'),
+    const generateTemplateHandler = new nodejs.NodejsFunction(this, 'GenerateTemplateHandler', {
+      entry: join(__dirname, 'lambda/generate/generate-template.ts'),
       environment: generationEnvironment,
       ...generationLambdaConfig,
     });
@@ -116,26 +116,26 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       ...generationLambdaConfig,
     });
 
-    const populateCharactersHandler = new nodejs.NodejsFunction(this, 'PopulateCharactersHandler', {
-      entry: join(__dirname, 'lambda/generate/populate-characters.ts'),
+    const generateCharactersHandler = new nodejs.NodejsFunction(this, 'GenerateCharactersHandler', {
+      entry: join(__dirname, 'lambda/generate/generate-characters.ts'),
       environment: generationEnvironment,
       ...generationLambdaConfig,
     });
 
-    const buildLocationsHandler = new nodejs.NodejsFunction(this, 'BuildLocationsHandler', {
-      entry: join(__dirname, 'lambda/generate/build-locations.ts'),
+    const generateLocationsHandler = new nodejs.NodejsFunction(this, 'GenerateLocationsHandler', {
+      entry: join(__dirname, 'lambda/generate/generate-locations.ts'),
       environment: generationEnvironment,
       ...generationLambdaConfig,
     });
 
-    const distributeFactsHandler = new nodejs.NodejsFunction(this, 'DistributeFactsHandler', {
-      entry: join(__dirname, 'lambda/generate/distribute-facts.ts'),
+    const generateFactsHandler = new nodejs.NodejsFunction(this, 'GenerateFactsHandler', {
+      entry: join(__dirname, 'lambda/generate/generate-facts.ts'),
       environment: generationEnvironment,
       ...generationLambdaConfig,
     });
 
-    const designCasebookHandler = new nodejs.NodejsFunction(this, 'DesignCasebookHandler', {
-      entry: join(__dirname, 'lambda/generate/design-casebook.ts'),
+    const generateCasebookHandler = new nodejs.NodejsFunction(this, 'GenerateCasebookHandler', {
+      entry: join(__dirname, 'lambda/generate/generate-casebook.ts'),
       environment: generationEnvironment,
       ...generationLambdaConfig,
     });
@@ -146,8 +146,8 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       ...proseLambdaConfig,
     });
 
-    const createQuestionsHandler = new nodejs.NodejsFunction(this, 'CreateQuestionsHandler', {
-      entry: join(__dirname, 'lambda/generate/create-questions.ts'),
+    const generateQuestionsHandler = new nodejs.NodejsFunction(this, 'GenerateQuestionsHandler', {
+      entry: join(__dirname, 'lambda/generate/generate-questions.ts'),
       environment: generationEnvironment,
       ...generationLambdaConfig,
     });
@@ -158,8 +158,8 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       ...bundlingConfig
     });
 
-    const validateDiscoveryGraphHandler = new nodejs.NodejsFunction(this, 'ValidateDiscoveryGraphHandler', {
-      entry: join(__dirname, 'lambda/generate/validate-discovery-graph.ts'),
+    const validateCasebookHandler = new nodejs.NodejsFunction(this, 'ValidateCasebookHandler', {
+      entry: join(__dirname, 'lambda/generate/validate-casebook.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
     });
@@ -184,12 +184,6 @@ export class ConsultingDetectiveStack extends cdk.Stack {
 
     const validateQuestionsHandler = new nodejs.NodejsFunction(this, 'ValidateQuestionsHandler', {
       entry: join(__dirname, 'lambda/generate/validate-questions.ts'),
-      environment: lambdaEnvironment,
-      ...bundlingConfig,
-    });
-
-    const validateCoherenceHandler = new nodejs.NodejsFunction(this, 'ValidateCoherenceHandler', {
-      entry: join(__dirname, 'lambda/generate/validate-coherence.ts'),
       environment: lambdaEnvironment,
       ...bundlingConfig,
     });
@@ -221,14 +215,14 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     });
 
     const llmHandlers = [
-      selectTemplateHandler,
+      generateTemplateHandler,
       generateEventsHandler,
-      populateCharactersHandler,
-      buildLocationsHandler,
-      distributeFactsHandler,
-      designCasebookHandler,
+      generateCharactersHandler,
+      generateLocationsHandler,
+      generateFactsHandler,
+      generateCasebookHandler,
       generateProseHandler,
-      createQuestionsHandler,
+      generateQuestionsHandler,
     ];
 
     for (const handler of llmHandlers) {
@@ -243,8 +237,8 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     // Generation Pipeline — Step Functions
     // ============================================
 
-    const selectTemplate = new tasks.LambdaInvoke(this, 'SelectTemplate', {
-      lambdaFunction: selectTemplateHandler,
+    const generateTemplate = new tasks.LambdaInvoke(this, 'GenerateTemplate', {
+      lambdaFunction: generateTemplateHandler,
       outputPath: '$.Payload',
     });
 
@@ -253,28 +247,28 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       outputPath: '$.Payload',
     });
 
-    const populateCharacters = new tasks.LambdaInvoke(this, 'PopulateCharacters', {
-      lambdaFunction: populateCharactersHandler,
+    const generateCharacters = new tasks.LambdaInvoke(this, 'GenerateCharacters', {
+      lambdaFunction: generateCharactersHandler,
       outputPath: '$.Payload',
     });
 
-    const buildLocations = new tasks.LambdaInvoke(this, 'BuildLocations', {
-      lambdaFunction: buildLocationsHandler,
+    const generateLocations = new tasks.LambdaInvoke(this, 'GenerateLocations', {
+      lambdaFunction: generateLocationsHandler,
       outputPath: '$.Payload',
     });
 
-    const distributeFacts = new tasks.LambdaInvoke(this, 'DistributeFacts', {
-      lambdaFunction: distributeFactsHandler,
+    const generateFacts = new tasks.LambdaInvoke(this, 'GenerateFacts', {
+      lambdaFunction: generateFactsHandler,
       outputPath: '$.Payload',
     });
 
-    const designCasebook = new tasks.LambdaInvoke(this, 'DesignCasebook', {
-      lambdaFunction: designCasebookHandler,
+    const generateCasebook = new tasks.LambdaInvoke(this, 'GenerateCasebook', {
+      lambdaFunction: generateCasebookHandler,
       outputPath: '$.Payload',
     });
 
-    const validateDiscoveryGraph = new tasks.LambdaInvoke(this, 'ValidateDiscoveryGraph', {
-      lambdaFunction: validateDiscoveryGraphHandler,
+    const validateCasebook = new tasks.LambdaInvoke(this, 'ValidateCasebook', {
+      lambdaFunction: validateCasebookHandler,
       outputPath: '$.Payload',
     });
 
@@ -303,18 +297,13 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       outputPath: '$.Payload',
     });
 
-    const createQuestions = new tasks.LambdaInvoke(this, 'CreateQuestions', {
-      lambdaFunction: createQuestionsHandler,
+    const generateQuestions = new tasks.LambdaInvoke(this, 'GenerateQuestions', {
+      lambdaFunction: generateQuestionsHandler,
       outputPath: '$.Payload',
     });
 
     const computeOptimalPath = new tasks.LambdaInvoke(this, 'ComputeOptimalPath', {
       lambdaFunction: computeOptimalPathHandler,
-      outputPath: '$.Payload',
-    });
-
-    const validateCoherence = new tasks.LambdaInvoke(this, 'ValidateCoherence', {
-      lambdaFunction: validateCoherenceHandler,
       outputPath: '$.Payload',
     });
 
@@ -348,20 +337,20 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     });
 
     // Init states for next stages (defined early so Choice states can reference them)
-    const initCharsRetries = new sfn.Pass(this, 'InitCharsRetries', {
-      resultPath: '$.populateCharactersRetries',
+    const initGenerateCharactersRetries = new sfn.Pass(this, 'InitGenerateCharactersRetries', {
+      resultPath: '$.generateCharactersRetries',
       result: sfn.Result.fromNumber(0),
     });
 
-    const initLocsRetries = new sfn.Pass(this, 'InitLocsRetries', {
-      resultPath: '$.buildLocationsRetries',
+    const initGenerateLocationsRetries = new sfn.Pass(this, 'InitGenerateLocationsRetries', {
+      resultPath: '$.generateLocationsRetries',
       result: sfn.Result.fromNumber(0),
     });
 
     const checkEvents = new sfn.Choice(this, 'CheckEvents')
       .when(
         sfn.Condition.booleanEquals('$.eventValidationResult.valid', true),
-        initCharsRetries,
+        initGenerateCharactersRetries,
       )
       .when(
         sfn.Condition.numberGreaterThanEquals('$.generateEventsRetries', 2),
@@ -373,7 +362,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     incrementEventsRetries.next(generateEvents);
     generateEvents.next(validateEvents);
     validateEvents.next(checkEvents);
-    initCharsRetries.next(populateCharacters);
+    initGenerateCharactersRetries.next(generateCharacters);
 
     // -- Characters validation with retry loop --
     const charactersValidationFailed = new sfn.Fail(this, 'CharactersValidationFailed', {
@@ -390,8 +379,8 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'generateEventsRetries.$': '$.generateEventsRetries',
         'characters.$': '$.characters',
         'characterValidationResult.$': '$.characterValidationResult',
-        'populateCharactersRetries': sfn.JsonPath.mathAdd(
-          sfn.JsonPath.numberAt('$.populateCharactersRetries'),
+        'generateCharactersRetries': sfn.JsonPath.mathAdd(
+          sfn.JsonPath.numberAt('$.generateCharactersRetries'),
           1,
         ),
       },
@@ -400,18 +389,18 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     const checkCharacters = new sfn.Choice(this, 'CheckCharacters')
       .when(
         sfn.Condition.booleanEquals('$.characterValidationResult.valid', true),
-        initLocsRetries,
+        initGenerateLocationsRetries,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.populateCharactersRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.generateCharactersRetries', 2),
         charactersValidationFailed,
       )
       .otherwise(incrementCharsRetries);
 
-    incrementCharsRetries.next(populateCharacters);
-    populateCharacters.next(validateCharacters);
+    incrementCharsRetries.next(generateCharacters);
+    generateCharacters.next(validateCharacters);
     validateCharacters.next(checkCharacters);
-    initLocsRetries.next(buildLocations);
+    initGenerateLocationsRetries.next(generateLocations);
 
     // -- Locations validation with retry loop --
     const locationsValidationFailed = new sfn.Fail(this, 'LocationsValidationFailed', {
@@ -428,11 +417,11 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'generateEventsRetries.$': '$.generateEventsRetries',
         'characters.$': '$.characters',
         'characterValidationResult.$': '$.characterValidationResult',
-        'populateCharactersRetries.$': '$.populateCharactersRetries',
+        'generateCharactersRetries.$': '$.generateCharactersRetries',
         'locations.$': '$.locations',
         'locationValidationResult.$': '$.locationValidationResult',
-        'buildLocationsRetries': sfn.JsonPath.mathAdd(
-          sfn.JsonPath.numberAt('$.buildLocationsRetries'),
+        'generateLocationsRetries': sfn.JsonPath.mathAdd(
+          sfn.JsonPath.numberAt('$.generateLocationsRetries'),
           1,
         ),
       },
@@ -441,21 +430,21 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     const checkLocations = new sfn.Choice(this, 'CheckLocations')
       .when(
         sfn.Condition.booleanEquals('$.locationValidationResult.valid', true),
-        distributeFacts,
+        generateFacts,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.buildLocationsRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.generateLocationsRetries', 2),
         locationsValidationFailed,
       )
       .otherwise(incrementLocsRetries);
 
-    incrementLocsRetries.next(buildLocations);
-    buildLocations.next(validateLocations);
+    incrementLocsRetries.next(generateLocations);
+    generateLocations.next(validateLocations);
     validateLocations.next(checkLocations);
 
-    // -- Discovery graph validation with retry loop --
-    // After DesignCasebook, validate the bipartite discovery graph.
-    // If invalid and retries remain, re-run DesignCasebook with error context.
+    // -- Casebook validation with retry loop --
+    // After GenerateCasebook, validate the bipartite discovery graph.
+    // If invalid and retries remain, re-run GenerateCasebook with error context.
 
     const discoveryGraphFailed = new sfn.Fail(this, 'DiscoveryGraphFailed', {
       cause: 'Discovery graph validation failed after maximum retries',
@@ -463,7 +452,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     });
 
     // Increment the retry counter via a Pass state
-    const incrementRetries = new sfn.Pass(this, 'IncrementCasebookRetries', {
+    const incrementCasebookRetries = new sfn.Pass(this, 'IncrementGenerateCasebookRetries', {
       parameters: {
         'input.$': '$.input',
         'template.$': '$.template',
@@ -473,40 +462,40 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'facts.$': '$.facts',
         'introductionFactIds.$': '$.introductionFactIds',
         'discoveryGraphResult.$': '$.discoveryGraphResult',
-        'designCasebookRetries': sfn.JsonPath.mathAdd(
-          sfn.JsonPath.numberAt('$.designCasebookRetries'),
+        'generateCasebookRetries': sfn.JsonPath.mathAdd(
+          sfn.JsonPath.numberAt('$.generateCasebookRetries'),
           1,
         ),
       },
     });
 
-    // Initialize retry counter to 0 before the first DesignCasebook attempt
-    const initRetries = new sfn.Pass(this, 'InitCasebookRetries', {
-      resultPath: '$.designCasebookRetries',
+    // Initialize retry counter to 0 before the first GenerateCasebook attempt
+    const initGenerateCasebookRetries = new sfn.Pass(this, 'InitGenerateCasebookRetries', {
+      resultPath: '$.generateCasebookRetries',
       result: sfn.Result.fromNumber(0),
     });
 
-    const checkDiscoveryGraph = new sfn.Choice(this, 'CheckDiscoveryGraph')
+    const checkCasebookValidation = new sfn.Choice(this, 'CheckCasebookValidation')
       .when(
         sfn.Condition.booleanEquals('$.discoveryGraphResult.valid', true),
         generateProse,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.designCasebookRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.generateCasebookRetries', 2),
         discoveryGraphFailed,
       )
-      .otherwise(incrementRetries);
+      .otherwise(incrementCasebookRetries);
 
-    // Retry loop: increment → re-run DesignCasebook → re-validate
-    incrementRetries.next(designCasebook);
+    // Retry loop: increment → re-run GenerateCasebook → re-validate
+    incrementCasebookRetries.next(generateCasebook);
 
-    // Wire: DesignCasebook → ValidateDiscoveryGraph → Choice
-    designCasebook.next(validateDiscoveryGraph);
-    validateDiscoveryGraph.next(checkDiscoveryGraph);
+    // Wire: GenerateCasebook → ValidateCasebook → Choice
+    generateCasebook.next(validateCasebook);
+    validateCasebook.next(checkCasebookValidation);
 
-    // Wire: DistributeFacts (valid from CheckLocations) → InitCasebookRetries → DesignCasebook
-    distributeFacts.next(initRetries);
-    initRetries.next(designCasebook);
+    // Wire: GenerateFacts (valid from CheckLocations) → InitGenerateCasebookRetries → GenerateCasebook
+    generateFacts.next(initGenerateCasebookRetries);
+    initGenerateCasebookRetries.next(generateCasebook);
 
     // -- Questions validation with retry loop --
     const questionsValidationFailed = new sfn.Fail(this, 'QuestionsValidationFailed', {
@@ -514,12 +503,12 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       error: 'QuestionsInvalid',
     });
 
-    const initQuestionsRetries = new sfn.Pass(this, 'InitQuestionsRetries', {
-      resultPath: '$.createQuestionsRetries',
+    const initGenerateQuestionsRetries = new sfn.Pass(this, 'InitGenerateQuestionsRetries', {
+      resultPath: '$.generateQuestionsRetries',
       result: sfn.Result.fromNumber(0),
     });
 
-    const incrementQuestionsRetries = new sfn.Pass(this, 'IncrementQuestionsRetries', {
+    const incrementGenerateQuestionsRetries = new sfn.Pass(this, 'IncrementGenerateQuestionsRetries', {
       parameters: {
         'input.$': '$.input',
         'template.$': '$.template',
@@ -530,14 +519,14 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'introductionFactIds.$': '$.introductionFactIds',
         'casebook.$': '$.casebook',
         'discoveryGraphResult.$': '$.discoveryGraphResult',
-        'designCasebookRetries.$': '$.designCasebookRetries',
+        'generateCasebookRetries.$': '$.generateCasebookRetries',
         'prose.$': '$.prose',
         'introduction.$': '$.introduction',
         'title.$': '$.title',
         'questions.$': '$.questions',
         'questionValidationResult.$': '$.questionValidationResult',
-        'createQuestionsRetries': sfn.JsonPath.mathAdd(
-          sfn.JsonPath.numberAt('$.createQuestionsRetries'),
+        'generateQuestionsRetries': sfn.JsonPath.mathAdd(
+          sfn.JsonPath.numberAt('$.generateQuestionsRetries'),
           1,
         ),
       },
@@ -549,23 +538,22 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         computeOptimalPath,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.createQuestionsRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.generateQuestionsRetries', 2),
         questionsValidationFailed,
       )
-      .otherwise(incrementQuestionsRetries);
+      .otherwise(incrementGenerateQuestionsRetries);
 
-    incrementQuestionsRetries.next(createQuestions);
-    initQuestionsRetries.next(createQuestions);
-    createQuestions.next(validateQuestions);
+    incrementGenerateQuestionsRetries.next(generateQuestions);
+    initGenerateQuestionsRetries.next(generateQuestions);
+    generateQuestions.next(validateQuestions);
     validateQuestions.next(checkQuestions);
-    computeOptimalPath.next(validateCoherence);
-    validateCoherence.next(storeCase);
+    computeOptimalPath.next(storeCase);
 
-    // Pipeline entry: SelectTemplate → InitEventsRetries → (GenerateEvents → ValidateEvents → CheckEvents)
-    const pipelineDefinition = selectTemplate.next(initEventsRetries);
+    // Pipeline entry: GenerateTemplate → InitEventsRetries → (GenerateEvents → ValidateEvents → CheckEvents)
+    const pipelineDefinition = generateTemplate.next(initEventsRetries);
 
-    // Continue after checkDiscoveryGraph (valid) → generateProse → InitQuestionsRetries → CreateQuestions → ...
-    generateProse.next(initQuestionsRetries);
+    // Continue after checkCasebookValidation (valid) → generateProse → InitQuestionsRetries → GenerateQuestions → ...
+    generateProse.next(initGenerateQuestionsRetries);
 
     const generationStateMachine = new sfn.StateMachine(this, 'CaseGenerationPipeline', {
       stateMachineName: 'ConsultingDetective-CaseGeneration',

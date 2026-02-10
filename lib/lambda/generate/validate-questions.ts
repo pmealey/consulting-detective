@@ -4,7 +4,7 @@ import type {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 8b: Validate Questions (after CreateQuestions)
+ * Pipeline Step 8b: Validate Questions (after GenerateQuestions)
  *
  * Pure logic — no LLM call. Validates:
  * - Every question.answerFactIds references a valid factId

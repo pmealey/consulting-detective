@@ -5,7 +5,7 @@ import {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 4: Build Location Graph
+ * Pipeline Step 4: Generate Locations
  *
  * Creates the spatial world model: buildings, rooms, streets, and outdoor areas
  * with containment hierarchy and perception edges (visibleFrom, audibleFrom).
@@ -80,7 +80,7 @@ ${locationValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
 
   const { data: locations } = await callModel(
     {
-      stepName: 'buildLocations',
+      stepName: 'generateLocations',
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,

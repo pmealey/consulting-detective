@@ -6,7 +6,7 @@ import type {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 4b: Validate Locations (after BuildLocations)
+ * Pipeline Step 4b: Validate Locations (after GenerateLocations)
  *
  * Pure logic — no LLM call. Validates:
  * - Every event.location references a valid locationId

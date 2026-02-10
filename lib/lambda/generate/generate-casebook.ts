@@ -5,7 +5,7 @@ import {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 6: Design Casebook Entries
+ * Pipeline Step 6: Generate Casebook
  *
  * Creates the player-facing address book: visitable entries that each
  * reveal specific facts. Uses person/place identity facts as gate keys
@@ -136,7 +136,7 @@ Pay close attention to the errors above. Ensure every fact is reachable from the
 
   const { data: casebook } = await callModel(
     {
-      stepName: 'designCasebook',
+      stepName: 'generateCasebook',
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,

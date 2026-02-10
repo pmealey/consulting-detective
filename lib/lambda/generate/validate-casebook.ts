@@ -5,7 +5,7 @@ import type {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 6b: Validate Discovery Graph
+ * Pipeline Step 6b: Validate Casebook
  *
  * Pure computation — no LLM call. Performs bipartite graph reachability
  * analysis (BFS) to verify that every fact and every casebook entry is
@@ -23,7 +23,7 @@ import type {
  *      b. New facts unlock new entries (OR-gate)
  *   4. Report any unreachable facts or entries as errors
  *
- * If validation fails, the Step Function retries DesignCasebook with
+ * If validation fails, the Step Function retries GenerateCasebook with
  * error context (up to 2 retries).
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {

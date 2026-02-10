@@ -5,7 +5,7 @@ import {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 5: Distribute Facts
+ * Pipeline Step 5: Generate Facts
  *
  * Extracts facts from the event chain and character knowledge,
  * tags each with a category. Creates person and place identity atoms
@@ -107,7 +107,7 @@ Define all facts. Each placeholder must become a concrete fact. Create person fa
 
   const { data: result } = await callModel(
     {
-      stepName: 'distributeFacts',
+      stepName: 'generateFacts',
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,

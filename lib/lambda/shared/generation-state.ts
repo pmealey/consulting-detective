@@ -5,14 +5,14 @@ import { z } from 'zod';
 // ============================================
 
 export const GENERATION_STEPS = [
-  'selectTemplate',
+  'generateTemplate',
   'generateEvents',
-  'populateCharacters',
-  'buildLocations',
-  'distributeFacts',
-  'designCasebook',
+  'generateCharacters',
+  'generateLocations',
+  'generateFacts',
+  'generateCasebook',
   'generateProse',
-  'createQuestions',
+  'generateQuestions',
 ] as const;
 
 export type GenerationStep = typeof GENERATION_STEPS[number];
@@ -67,7 +67,7 @@ export interface CaseGenerationState {
   // -- Input (always present after trigger) --
   input: GenerateCaseInput;
 
-  // -- Step 1: Select Template --
+  // -- Step 1: Generate Template --
   template?: CaseTemplate;
 
   // -- Step 2: Generate Events --
@@ -77,48 +77,48 @@ export interface CaseGenerationState {
   /** Number of times GenerateEvents has been retried after validation failure. */
   generateEventsRetries?: number;
 
-  // -- Step 3: Populate Characters --
+  // -- Step 3: Generate Characters --
   characters?: Record<string, CharacterDraft>;
-  /** Result of character/event cross-reference validation after PopulateCharacters. */
+  /** Result of character/event cross-reference validation after GenerateCharacters. */
   characterValidationResult?: ValidationResult;
-  /** Number of times PopulateCharacters has been retried after validation failure. */
-  populateCharactersRetries?: number;
+  /** Number of times GenerateCharacters has been retried after validation failure. */
+  generateCharactersRetries?: number;
 
-  // -- Step 4: Build Locations --
+  // -- Step 4: Generate Locations --
   locations?: Record<string, LocationDraft>;
   /** Result of location validation (event locations, accessibleFrom graph). */
   locationValidationResult?: ValidationResult;
-  /** Number of times BuildLocations has been retried after validation failure. */
-  buildLocationsRetries?: number;
+  /** Number of times GenerateLocations has been retried after validation failure. */
+  generateLocationsRetries?: number;
 
-  // -- Step 5: Distribute Facts --
+  // -- Step 5: Generate Facts --
   facts?: Record<string, FactDraft>;
   introductionFactIds?: string[];
 
-  // -- Step 6: Design Casebook --
+  // -- Step 6: Generate Casebook --
   casebook?: Record<string, CasebookEntryDraft>;
 
-  // -- Step 6b: Validate Discovery Graph --
+  // -- Step 6b: Validate Casebook --
   discoveryGraphResult?: DiscoveryGraphResult;
-  /** Number of times DesignCasebook has been retried after graph validation failure */
-  designCasebookRetries?: number;
+  /** Number of times GenerateCasebook has been retried after graph validation failure */
+  generateCasebookRetries?: number;
 
   // -- Step 7: Generate Prose --
   prose?: Record<string, string>;
   introduction?: string;
   title?: string;
 
-  // -- Step 8: Create Questions --
+  // -- Step 8: Generate Questions --
   questions?: QuestionDraft[];
   /** Result of question validation (answerFactIds exist, reachable, category match). */
   questionValidationResult?: ValidationResult;
-  /** Number of times CreateQuestions has been retried after validation failure. */
-  createQuestionsRetries?: number;
+  /** Number of times GenerateQuestions has been retried after validation failure. */
+  generateQuestionsRetries?: number;
 
   // -- Step 9: Compute Optimal Path --
   optimalPath?: string[];
 
-  // -- Step 10: Validate Coherence --
+  // -- Step 10: Store Case (validation absorbed into ComputeOptimalPath) --
   validationResult?: ValidationResult;
 }
 

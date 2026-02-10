@@ -5,7 +5,7 @@ import {
 } from '../shared/generation-state';
 
 /**
- * Pipeline Step 8: Create Questions
+ * Pipeline Step 8: Generate Questions
  *
  * Designs 4-8 end-of-case quiz questions that require the player
  * to connect facts discovered across multiple casebook entries.
@@ -108,7 +108,7 @@ ${questionValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
 
   const { data: questions } = await callModel(
     {
-      stepName: 'createQuestions',
+      stepName: 'generateQuestions',
       systemPrompt,
       userPrompt,
       modelConfig: input.modelConfig,
