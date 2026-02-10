@@ -390,14 +390,14 @@ function getMysteryStyleCasebookConstraints(mysteryStyle: string): string {
     case 'isolated':
       return `Style "isolated" — CONTAINED SETTING:
 - All entries are within a single building, estate, vessel, or compound. No street addresses across town.
-- Labels: use room names, wing names, or on-site descriptors ("The Study", "East Wing", "Deck B", "The Servants' Hall").
-- Addresses: a single location line (e.g. "Pemberton House, Montague Square" or "S.S. Aurora, First-Class Deck") with sub-locations as the "address" for each entry (e.g. "The Library", "Upper Corridor"). The player never leaves the main site.`;
+- Labels: use room names, wing names, or on-site descriptors ("The Study", "East Wing", "Deck B", "The Servants' Hall", "Hydroponics Bay", "The Inner Sanctum").
+- Addresses: a single location line with sub-locations as the "address" for each entry. The player never leaves the main site. Adapt to the setting (e.g. a manor house, a starship, a castle, an underwater habitat, a sealed arcane tower).`;
 
     case 'sprawling':
       return `Style "sprawling" — WIDE INVESTIGATION:
 - Entries span the city or region. Labels and addresses should feel like a real address book: different streets, neighborhoods, institutions.
-- Labels: full names or titles ("Inspector Lestrade", "The Pemberton Residence", "Dockside Tavern").
-- Addresses: era-appropriate full addresses — street number, street name, district (e.g. "14 Montague Street, Bloomsbury", "Scotland Yard, Whitehall"). Each entry is a distinct place the detective travels to.`;
+- Labels: full names or titles appropriate to the setting and era.
+- Addresses: setting-appropriate full addresses. Each entry is a distinct place the detective travels to. Adapt the address format to the era and world (street addresses for modern cities, district names for ancient cities, sector/level designators for space stations, quarter names for fantasy cities, etc.).`;
 
     case 'time-limited':
       return `Style "time-limited" — URGENCY AND DEADLINE:

@@ -130,7 +130,7 @@ function getMysteryStyleProseConstraints(mysteryStyle: string): string {
     case 'sprawling':
       return `Style "sprawling" — WIDE INVESTIGATION:
 - The investigation spans a city or region. Convey a sense of movement and distance between entries.
-- Each entry feels like a different world — the docks vs. the drawing room vs. the courthouse.
+- Each entry feels like a different world — different social strata, neighborhoods, or spheres of influence.
 - Time passes at a natural pace. The investigation takes days. Transitions between entries can mention travel.`;
 
     case 'time-limited':
