@@ -152,6 +152,21 @@ export function Home() {
           );
         })}
       </section>
+
+      {/* Temporary debug: clear all localStorage (sessions, facts ack, etc.) */}
+      <section className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+        <p className="text-xs text-amber-800 font-medium mb-2">Debug</p>
+        <button
+          type="button"
+          onClick={() => {
+            localStorage.clear();
+            window.location.reload();
+          }}
+          className="text-sm px-3 py-1.5 rounded border border-amber-300 bg-white text-amber-800 hover:bg-amber-100 transition-colors"
+        >
+          Clear all local storage
+        </button>
+      </section>
     </div>
   );
 }
