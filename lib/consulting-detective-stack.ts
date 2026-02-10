@@ -520,7 +520,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'locations.$': '$.locations',
         'locationValidationResult.$': '$.locationValidationResult',
         'generateLocationsRetries.$': '$.generateLocationsRetries',
-        'factPlaceholders.$': '$.factPlaceholders',
+        'factSkeletons.$': '$.factSkeletons',
         'factGraph.$': '$.factGraph',
         'facts.$': '$.facts',
         'factValidationResult.$': '$.factValidationResult',
@@ -554,9 +554,9 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     // After GenerateCasebook, validate the bipartite discovery graph.
     // If invalid and retries remain, re-run GenerateCasebook with error context.
 
-    const discoveryGraphFailed = new sfn.Fail(this, 'DiscoveryGraphFailed', {
-      cause: 'Discovery graph validation failed after maximum retries',
-      error: 'DiscoveryGraphInvalid',
+    const casebookValidationFailed = new sfn.Fail(this, 'CasebookValidationFailed', {
+      cause: 'Casebook validation failed after maximum retries',
+      error: 'CasebookInvalid',
     });
 
     // Increment the retry counter via a Pass state
@@ -571,7 +571,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'introductionFactIds.$': '$.introductionFactIds',
         'factGraph.$': '$.factGraph',
         'computedKnowledge.$': '$.computedKnowledge',
-        'discoveryGraphResult.$': '$.discoveryGraphResult',
+        'casebookValidationResult.$': '$.casebookValidationResult',
         'generateCasebookRetries': sfn.JsonPath.mathAdd(
           sfn.JsonPath.numberAt('$.generateCasebookRetries'),
           1,
@@ -581,12 +581,12 @@ export class ConsultingDetectiveStack extends cdk.Stack {
 
     const checkCasebookValidation = new sfn.Choice(this, 'CheckCasebookValidation')
       .when(
-        sfn.Condition.booleanEquals('$.discoveryGraphResult.valid', true),
+        sfn.Condition.booleanEquals('$.casebookValidationResult.valid', true),
         generateProse,
       )
       .when(
         sfn.Condition.numberGreaterThanEquals('$.generateCasebookRetries', 2),
-        discoveryGraphFailed,
+        casebookValidationFailed,
       )
       .otherwise(incrementCasebookRetries);
 
@@ -621,7 +621,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         'facts.$': '$.facts',
         'introductionFactIds.$': '$.introductionFactIds',
         'casebook.$': '$.casebook',
-        'discoveryGraphResult.$': '$.discoveryGraphResult',
+        'casebookValidationResult.$': '$.casebookValidationResult',
         'generateCasebookRetries.$': '$.generateCasebookRetries',
         'prose.$': '$.prose',
         'introduction.$': '$.introduction',

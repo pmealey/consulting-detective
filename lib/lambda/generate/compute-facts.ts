@@ -4,7 +4,7 @@ import type {
   ComputedKnowledge,
   EventDraft,
   FactGraph,
-  FactPlaceholder,
+  FactSkeleton,
   LocationDraft,
 } from '../shared/generation-state';
 
@@ -20,10 +20,10 @@ import type {
  *
  * Responsibilities:
  *
- * 1. Collect true fact placeholders from event reveals (remapping role IDs
+ * 1. Collect true fact skeletons from event reveals (remapping role IDs
  *    to character IDs via roleMapping from GenerateCharacters).
  *
- * 2. Create false fact placeholders from denials: for each character with
+ * 2. Create false fact skeletons from denials: for each character with
  *    a 'denies' knowledge state entry, create a corresponding false fact
  *    that the character 'believes'.
  *
@@ -36,10 +36,10 @@ import type {
  *    specific introduction facts (which aren't chosen yet), we ensure
  *    the entire graph is fully connected.
  *
- * 5. Create bridge fact placeholders connecting smaller components to
+ * 5. Create bridge fact skeletons connecting smaller components to
  *    the largest, so the graph is one connected component.
  *
- * 6. Create red herring / incidental fact placeholders in sparse areas.
+ * 6. Create red herring / incidental fact skeletons in sparse areas.
  *
  * Introduction fact selection is NOT done here — it moves to
  * GenerateIntroduction where the AI can select facts that form a
@@ -66,7 +66,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     throw new Error('ComputeFacts requires roleMapping from GenerateCharacters');
   }
 
-  const { factPlaceholders, factGraph } = computeFacts(
+  const { factSkeletons, factGraph } = computeFacts(
     events,
     characters,
     locations,
@@ -76,7 +76,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
 
   return {
     ...state,
-    factPlaceholders,
+    factSkeletons,
     factGraph,
   };
 };
@@ -90,23 +90,16 @@ export function computeFacts(
   locations: Record<string, LocationDraft>,
   computedKnowledge: ComputedKnowledge,
   roleMapping: Record<string, string>,
-): { factPlaceholders: FactPlaceholder[]; factGraph: FactGraph } {
-  // ── Step 1: Collect true fact placeholders from event reveals ────
-  const placeholders = collectEventRevealPlaceholders(events, roleMapping);
+): { factSkeletons: FactSkeleton[]; factGraph: FactGraph } {
+  // ── Step 1: Collect true fact skeletons from event reveals ───────
+  const skeletons = collectEventRevealSkeletons(events, roleMapping);
 
-  // ── Step 2: Create false fact placeholders from denials ──────────
-  const denialPlaceholders = createDenialPlaceholders(
-    characters,
-    placeholders,
-  );
-  placeholders.push(...denialPlaceholders);
+  // ── Step 2: Create false fact skeletons from denials ─────────────
+  const denialSkeletons = createDenialSkeletons(characters, skeletons);
+  skeletons.push(...denialSkeletons);
 
   // ── Step 3: Build the bipartite graph ────────────────────────────
-  let graph = buildFactGraph(
-    placeholders,
-    characters,
-    computedKnowledge,
-  );
+  let graph = buildFactGraph(skeletons, characters, computedKnowledge);
 
   // ── Step 4: Detect disconnected components ───────────────────────
   // We check full graph connectivity rather than seeding from specific
@@ -116,55 +109,55 @@ export function computeFacts(
   // to reach all subjects and facts through BFS.
   const { components, largestComponent } = findConnectedComponents(
     graph,
-    placeholders,
+    skeletons,
   );
 
-  // ── Step 5: Create bridge placeholders for connectivity ──────────
+  // ── Step 5: Create bridge facts for connectivity ─────────────────
   // Bridge every smaller component to the largest component so the
   // entire graph is connected. GenerateIntroduction can then pick any
   // facts as seeds and the full graph will be reachable.
-  const bridgePlaceholders = createBridgePlaceholders(
+  const bridgeSkeletons = createBridgeSkeletons(
     components,
     largestComponent,
     graph,
     characters,
-    placeholders,
+    skeletons,
   );
-  placeholders.push(...bridgePlaceholders);
+  skeletons.push(...bridgeSkeletons);
 
-  // ── Step 6: Create red herring / incidental placeholders ─────────
-  const redHerringPlaceholders = createRedHerringPlaceholders(
+  // ── Step 6: Create red herring / incidental facts ────────────────
+  const redHerringSkeletons = createRedHerringSkeletons(
     graph,
     characters,
     locations,
-    placeholders,
+    skeletons,
   );
-  placeholders.push(...redHerringPlaceholders);
+  skeletons.push(...redHerringSkeletons);
 
-  // Rebuild graph with all placeholders (bridges + red herrings added)
-  graph = buildFactGraph(placeholders, characters, computedKnowledge);
+  // Rebuild graph with all skeletons (bridges + red herrings added)
+  graph = buildFactGraph(skeletons, characters, computedKnowledge);
 
-  return { factPlaceholders: placeholders, factGraph: graph };
+  return { factSkeletons: skeletons, factGraph: graph };
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Step 1: Collect true fact placeholders from event reveals
+// Step 1: Collect true fact skeletons from event reveals
 // ════════════════════════════════════════════════════════════════════
 
 /**
- * Extracts unique fact placeholders from all event reveals, remapping
+ * Extracts unique fact skeletons from all event reveals, remapping
  * role IDs in subjects to character IDs using the roleMapping.
  *
- * Deduplicates by reveal ID — the same fact placeholder can appear in
- * multiple events (e.g. the same evidence discovered at two scenes).
- * When a placeholder appears in multiple events, subjects are merged.
+ * Deduplicates by factId — the same fact can appear in multiple events
+ * (e.g. the same evidence discovered at two scenes). When a fact
+ * appears in multiple events, subjects are merged.
  */
-function collectEventRevealPlaceholders(
+function collectEventRevealSkeletons(
   events: Record<string, EventDraft>,
   roleMapping: Record<string, string>,
-): FactPlaceholder[] {
-  // Track seen placeholders by ID for deduplication and subject merging
-  const seen = new Map<string, { placeholder: FactPlaceholder; subjectSet: Set<string> }>();
+): FactSkeleton[] {
+  // Track seen skeletons by factId for deduplication and subject merging
+  const seen = new Map<string, { skeleton: FactSkeleton; subjectSet: Set<string> }>();
 
   for (const event of Object.values(events)) {
     for (const reveal of event.reveals) {
@@ -182,8 +175,8 @@ function collectEventRevealPlaceholders(
       } else {
         const subjectSet = new Set(remappedSubjects);
         seen.set(reveal.id, {
-          placeholder: {
-            placeholderId: reveal.id,
+          skeleton: {
+            factId: reveal.id,
             subjects: [], // filled below from the set
             veracity: 'true' as const,
             source: { type: 'event_reveal', eventId: event.eventId },
@@ -195,36 +188,36 @@ function collectEventRevealPlaceholders(
   }
 
   // Finalize subjects from sets
-  const placeholders: FactPlaceholder[] = [];
-  for (const { placeholder, subjectSet } of seen.values()) {
-    placeholder.subjects = [...subjectSet];
-    placeholders.push(placeholder);
+  const skeletons: FactSkeleton[] = [];
+  for (const { skeleton, subjectSet } of seen.values()) {
+    skeleton.subjects = [...subjectSet];
+    skeletons.push(skeleton);
   }
 
-  return placeholders;
+  return skeletons;
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Step 2: Create false fact placeholders from denials
+// Step 2: Create false fact skeletons from denials
 // ════════════════════════════════════════════════════════════════════
 
 /**
  * For each character that 'denies' a true fact, creates a corresponding
- * false fact placeholder. The false fact shares the same subjects as the
+ * false fact skeleton. The false fact shares the same subjects as the
  * denied fact. The character's knowledgeState should have 'believes' for
  * the false fact (this is set up by GenerateCharacters, but we create
- * the placeholder here).
+ * the skeleton here).
  */
-function createDenialPlaceholders(
+function createDenialSkeletons(
   characters: Record<string, CharacterDraft>,
-  existingPlaceholders: FactPlaceholder[],
-): FactPlaceholder[] {
-  const placeholdersByIds = new Map<string, FactPlaceholder>();
-  for (const p of existingPlaceholders) {
-    placeholdersByIds.set(p.placeholderId, p);
+  existingSkeletons: FactSkeleton[],
+): FactSkeleton[] {
+  const skeletonsByFactId = new Map<string, FactSkeleton>();
+  for (const s of existingSkeletons) {
+    skeletonsByFactId.set(s.factId, s);
   }
 
-  const denialPlaceholders: FactPlaceholder[] = [];
+  const denialSkeletons: FactSkeleton[] = [];
   const seenDenials = new Set<string>(); // avoid duplicates if two characters deny the same fact
 
   for (const character of Object.values(characters)) {
@@ -232,15 +225,15 @@ function createDenialPlaceholders(
       if (status !== 'denies') continue;
 
       // Find the denied true fact's subjects
-      const deniedFact = placeholdersByIds.get(factId);
+      const deniedFact = skeletonsByFactId.get(factId);
       if (!deniedFact) continue; // can't create a false counterpart without the original
 
-      const falsePlaceholderId = `${factId}_false`;
-      if (seenDenials.has(falsePlaceholderId)) continue;
-      seenDenials.add(falsePlaceholderId);
+      const falseFactId = `${factId}_false`;
+      if (seenDenials.has(falseFactId)) continue;
+      seenDenials.add(falseFactId);
 
-      denialPlaceholders.push({
-        placeholderId: falsePlaceholderId,
+      denialSkeletons.push({
+        factId: falseFactId,
         subjects: [...deniedFact.subjects],
         veracity: 'false',
         source: {
@@ -252,7 +245,7 @@ function createDenialPlaceholders(
     }
   }
 
-  return denialPlaceholders;
+  return denialSkeletons;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -263,13 +256,13 @@ function createDenialPlaceholders(
  * Builds the bipartite graph connecting facts to subjects and subjects
  * to the facts they can reveal.
  *
- * - factToSubjects: each fact's subjects (from the placeholder)
+ * - factToSubjects: each fact's subjects (from the skeleton)
  * - subjectToFacts: which facts each subject can reveal:
  *   - Characters: facts where knowledgeState is 'knows', 'suspects', or 'believes'
  *   - Locations: facts from computedKnowledge.locationReveals
  */
 function buildFactGraph(
-  placeholders: FactPlaceholder[],
+  skeletons: FactSkeleton[],
   characters: Record<string, CharacterDraft>,
   computedKnowledge: ComputedKnowledge,
 ): FactGraph {
@@ -285,10 +278,10 @@ function buildFactGraph(
   }
 
   // Fact -> subjects edges
-  for (const placeholder of placeholders) {
-    factToSubjects[placeholder.placeholderId] = [...placeholder.subjects];
+  for (const skeleton of skeletons) {
+    factToSubjects[skeleton.factId] = [...skeleton.subjects];
     // Ensure all subjects have an entry
-    for (const subjectId of placeholder.subjects) {
+    for (const subjectId of skeleton.subjects) {
       if (!subjectToFacts[subjectId]) subjectToFacts[subjectId] = [];
     }
   }
@@ -301,10 +294,9 @@ function buildFactGraph(
     }
     for (const [factId, status] of Object.entries(character.knowledgeState)) {
       if (revealableStatuses.has(status)) {
-        // Check that this fact exists in our placeholders.
-        // The factId in knowledgeState is the placeholder ID directly —
-        // for 'believes' entries, GenerateCharacters already uses the
-        // false fact's ID (e.g. "fact_xxx_false").
+        // Check that this fact exists in our skeletons — for 'believes'
+        // entries, GenerateCharacters already uses the false fact's ID
+        // (e.g. "fact_xxx_false").
         if (factToSubjects[factId] !== undefined) {
           if (!subjectToFacts[character.characterId].includes(factId)) {
             subjectToFacts[character.characterId].push(factId);
@@ -351,10 +343,10 @@ interface GraphComponent {
  */
 function findConnectedComponents(
   graph: FactGraph,
-  placeholders: FactPlaceholder[],
+  skeletons: FactSkeleton[],
 ): { components: GraphComponent[]; largestComponent: GraphComponent } {
   const allSubjects = new Set(Object.keys(graph.subjectToFacts));
-  const allFacts = new Set(placeholders.map((p) => p.placeholderId));
+  const allFacts = new Set(skeletons.map((s) => s.factId));
 
   // Build a reverse index: subject -> facts that reference it (via factToSubjects).
   // This is the inverse of factToSubjects — "which facts mention this subject?"
@@ -450,12 +442,12 @@ function findConnectedComponents(
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Step 5: Create bridge placeholders for connectivity
+// Step 5: Create bridge facts for connectivity
 // ════════════════════════════════════════════════════════════════════
 
 /**
  * For each component that isn't the largest, creates a bridge fact
- * placeholder connecting a character in the largest component to a
+ * skeleton connecting a character in the largest component to a
  * subject in the smaller component.
  *
  * This ensures the entire graph is one connected component, so that
@@ -465,17 +457,17 @@ function findConnectedComponents(
  * Strategy: round-robin through characters in the largest component,
  * picking one subject from each smaller component to bridge to.
  */
-function createBridgePlaceholders(
+function createBridgeSkeletons(
   components: GraphComponent[],
   largestComponent: GraphComponent,
   graph: FactGraph,
   characters: Record<string, CharacterDraft>,
-  _existingPlaceholders: FactPlaceholder[],
-): FactPlaceholder[] {
+  _existingSkeletons: FactSkeleton[],
+): FactSkeleton[] {
   // If there's only one component, the graph is already connected
   if (components.length <= 1) return [];
 
-  const bridgePlaceholders: FactPlaceholder[] = [];
+  const bridgeSkeletons: FactSkeleton[] = [];
 
   // Find characters in the largest component
   const largestCharacterIds: string[] = [];
@@ -515,9 +507,9 @@ function createBridgePlaceholders(
     const bridgeCharId = largestCharacterIds[charIdx % largestCharacterIds.length];
     charIdx++;
 
-    const bridgeId = `bridge_${bridgeCharId}_to_${targetSubject}`;
-    bridgePlaceholders.push({
-      placeholderId: bridgeId,
+    const bridgeId = `fact_bridge_${bridgeCharId}_to_${targetSubject}`;
+    bridgeSkeletons.push({
+      factId: bridgeId,
       subjects: [bridgeCharId, targetSubject],
       veracity: 'true',
       source: {
@@ -531,15 +523,15 @@ function createBridgePlaceholders(
     characters[bridgeCharId].knowledgeState[bridgeId] = 'knows';
   }
 
-  return bridgePlaceholders;
+  return bridgeSkeletons;
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Step 6: Create red herring / incidental placeholders
+// Step 6: Create red herring / incidental facts
 // ════════════════════════════════════════════════════════════════════
 
 /**
- * Adds a few red herring fact placeholders in sparse areas of the graph.
+ * Adds a few red herring fact skeletons in sparse areas of the graph.
  * Red herrings add noise for the player — they're discoverable facts
  * that lead nowhere (no onward subjects) or fill gaps.
  *
@@ -550,13 +542,13 @@ function createBridgePlaceholders(
  *
  * Target: ~2-3 red herrings for a medium case.
  */
-function createRedHerringPlaceholders(
+function createRedHerringSkeletons(
   graph: FactGraph,
   characters: Record<string, CharacterDraft>,
   locations: Record<string, LocationDraft>,
-  existingPlaceholders: FactPlaceholder[],
-): FactPlaceholder[] {
-  const redHerrings: FactPlaceholder[] = [];
+  existingSkeletons: FactSkeleton[],
+): FactSkeleton[] {
+  const redHerrings: FactSkeleton[] = [];
 
   // Count how many facts each character reveals
   const characterFactCounts = new Map<string, number>();
@@ -574,7 +566,7 @@ function createRedHerringPlaceholders(
   const locationIds = Object.keys(locations);
 
   // We want ~2-3 red herrings total
-  const targetCount = Math.min(3, Math.max(1, Math.floor(existingPlaceholders.length / 5)));
+  const targetCount = Math.min(3, Math.max(1, Math.floor(existingSkeletons.length / 5)));
   let created = 0;
 
   for (const [charId] of sortedChars) {
@@ -599,10 +591,10 @@ function createRedHerringPlaceholders(
     }
 
     const subjects = bestLocation ? [charId, bestLocation] : [charId];
-    const herringId = `red_herring_${charId}_${created}`;
+    const herringId = `fact_red_herring_${charId}_${created}`;
 
     redHerrings.push({
-      placeholderId: herringId,
+      factId: herringId,
       subjects,
       veracity: 'true',
       source: { type: 'red_herring' },

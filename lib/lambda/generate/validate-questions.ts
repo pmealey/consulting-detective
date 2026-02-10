@@ -16,7 +16,7 @@ import type {
  * On failure, the Step Function retries GenerateQuestions.
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { questions, facts, characters, locations, discoveryGraphResult } = state;
+  const { questions, facts, characters, locations, casebookValidationResult } = state;
 
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -37,9 +37,9 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     };
   }
 
-  if (!discoveryGraphResult?.valid || !discoveryGraphResult.reachableFactIds) {
+  if (!casebookValidationResult?.valid || !casebookValidationResult.reachableFactIds) {
     errors.push(
-      'Discovery graph was not validated or is invalid; cannot verify question-fact reachability',
+      'Casebook validation was not run or is invalid; cannot verify question-fact reachability',
     );
     return {
       ...state,
@@ -50,7 +50,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   const factIds = new Set(Object.keys(facts));
   const characterIds = new Set(characters ? Object.keys(characters) : []);
   const locationIds = new Set(locations ? Object.keys(locations) : []);
-  const reachableFactIds = new Set(discoveryGraphResult.reachableFactIds);
+  const reachableFactIds = new Set(casebookValidationResult.reachableFactIds);
 
   const validAnswerTypes = new Set(['person', 'location', 'fact']);
 

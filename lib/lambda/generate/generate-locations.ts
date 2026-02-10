@@ -11,14 +11,26 @@ import {
  * with containment hierarchy and perception edges (visibleFrom, audibleFrom).
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template, events, characters, computedKnowledge } = state;
+  const { input, template, events, characters, computedKnowledge, roleMapping } = state;
 
   if (!template) throw new Error('Step 4 requires template from step 1');
   if (!events) throw new Error('Step 4 requires events from step 2');
   if (!characters) throw new Error('Step 4 requires characters from step 3');
 
-  // Collect all location placeholders used in events
-  const locationPlaceholders = [...new Set(Object.values(events).map((e) => e.location))];
+  // Collect all location placeholders used in events: event locations plus any
+  // location id mentioned in event reveals (subjects not in roleMapping are
+  // location placeholders; roleIds are mapped to characterIds later).
+  const locationPlaceholdersSet = new Set<string>(Object.values(events).map((e) => e.location));
+  for (const event of Object.values(events)) {
+    for (const reveal of event.reveals ?? []) {
+      for (const subjectId of reveal.subjects ?? []) {
+        if (!roleMapping || !(subjectId in roleMapping)) {
+          locationPlaceholdersSet.add(subjectId);
+        }
+      }
+    }
+  }
+  const locationPlaceholders = [...locationPlaceholdersSet];
 
   const systemPrompt = `You are a location designer for a mystery game. Given a case template, event chain, and characters, you create a coherent spatial world.
 

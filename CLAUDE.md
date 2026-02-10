@@ -22,7 +22,7 @@ A **daily mystery game** inspired by *Sherlock Holmes, Consulting Detective* tab
 | `lib/lambda/generate/compute-facts.ts` | Programmatic: fact–subject graph, placeholders, bridge/red-herring facts |
 | `lib/lambda/generate/generate-template.ts` | AI: case template (crime type, setting, style/tone) |
 | `lib/lambda/generate/generate-introduction.ts` | AI: introduction fact selection + prose + title |
-| `lib/lambda/generate/validate-facts.ts` | Validation: fact placeholders expanded, categories and subject refs |
+| `lib/lambda/generate/validate-facts.ts` | Validation: fact skeletons filled, categories and subject refs |
 | `ui/` | React + Vite + Tailwind frontend (separate npm package) |
 
 ## The Data Model Is the Source of Truth

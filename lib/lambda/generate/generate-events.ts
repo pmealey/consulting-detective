@@ -43,11 +43,11 @@ Each event must match this schema:
 
 Each EventReveal must match:
 {
-  "id": string,                   // factId placeholder (e.g. "fact_suspect_left_handed")
+  "id": string,                   // factId (e.g. "fact_suspect_left_handed")
   "audible": boolean,             // learnable by hearing (auditory witnesses can learn this)
   "visible": boolean,             // learnable by seeing (visual witnesses can learn this)
   "physical": boolean,            // leaves physical evidence discoverable later
-  "subjects": string[]            // roleId/locationId placeholders this fact is about (at least 1)
+  "subjects": string[]            // roleId/locationId references this fact is about (at least 1)
 }
 
 Involvement types: "agent", "present", "witness_visual", "witness_auditory", "discovered_evidence"
@@ -67,7 +67,7 @@ Guidelines:
 - The agent in each event must reference a roleId from the template's characterRoles.
 - Every event must have at least the agent in its involvement map (with type "agent").
 - Timestamps should be sequential integers starting at 0.
-- Each event should reveal 1-3 facts as EventReveal objects. For each reveal, think about whether it's audible (could be overheard), visible (could be seen from afar), and/or physical (leaves evidence behind). Set the subjects to the roleIds and/or locationId placeholders the fact is about.
+- Each event should reveal 1-3 facts as EventReveal objects. For each reveal, think about whether it's audible (could be overheard), visible (could be seen from afar), and/or physical (leaves evidence behind). Set the subjects to the roleIds and/or locationIds the fact is about.
 - The causes array should reference other eventIds that this event leads to (forward edges in the DAG).
 - Ensure the causal DAG is acyclic and connected.
 - Location references should be descriptive placeholders (e.g. "loc_pub", "loc_victim_home") — they'll be fully defined in a later step.

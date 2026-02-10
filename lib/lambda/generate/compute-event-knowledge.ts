@@ -21,7 +21,7 @@ import type {
  *    - witness_auditory: learn reveals where `audible` is true
  *    - discovered_evidence: learn reveals where `physical` is true
  *
- * 2. **locationReveals** — fact placeholder IDs discoverable as physical
+ * 2. **locationReveals** — fact IDs discoverable as physical
  *    evidence at each location. Collected from reveals with `physical: true`,
  *    with cleanup detection: if a later event at the same location has the
  *    same fact ID with `physical: false`, the evidence was cleaned up and

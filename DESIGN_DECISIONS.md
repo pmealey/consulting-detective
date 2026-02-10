@@ -168,7 +168,7 @@ The rule is simple: if a resource holds data you can't regenerate, it goes in th
 
 **Alternatives considered**: Flat list of fact IDs; deriving perception from event location and involvement only.
 
-**Rationale**: Different involvement types learn facts through different channels. An agent or someone present learns everything; a visual witness only learns reveals with `visible: true`; an auditory witness only `audible: true`; someone who discovers evidence only `physical: true`. Storing these flags on each reveal lets ComputeEventKnowledge build role and location knowledge programmatically without re-interpreting prose. `subjects` on the reveal ties the fact placeholder to role/location placeholders before characters and locations exist.
+**Rationale**: Different involvement types learn facts through different channels. An agent or someone present learns everything; a visual witness only learns reveals with `visible: true`; an auditory witness only `audible: true`; someone who discovers evidence only `physical: true`. Storing these flags on each reveal lets ComputeEventKnowledge build role and location knowledge programmatically without re-interpreting prose. `subjects` on the reveal ties the factId to role/location IDs before characters and locations exist.
 
 ---
 
@@ -178,7 +178,7 @@ The rule is simple: if a resource holds data you can't regenerate, it goes in th
 
 **Alternatives considered**: Only `knows` and `suspects`; freeform strings.
 
-**Rationale**: Characters can actively conceal (`hides`), contradict the truth (`denies`, with a corresponding false fact they `believes`), or confidently state false information (`believes`). These states drive prose generation (deflection, denial, confident misinformation) and feed into ComputeFacts (denials create false fact placeholders; bridge facts and red herrings use the same knowledge-state machinery). A fixed enum keeps validation and downstream logic simple while covering the needed narrative behaviors.
+**Rationale**: Characters can actively conceal (`hides`), contradict the truth (`denies`, with a corresponding false fact they `believes`), or confidently state false information (`believes`). These states drive prose generation (deflection, denial, confident misinformation) and feed into ComputeFacts (denials create false fact skeletons; bridge facts and red herrings use the same knowledge-state machinery). A fixed enum keeps validation and downstream logic simple while covering the needed narrative behaviors.
 
 ---
 

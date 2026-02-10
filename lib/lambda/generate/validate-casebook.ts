@@ -1,6 +1,6 @@
 import type {
   CaseGenerationState,
-  DiscoveryGraphResult,
+  CasebookValidationResult,
   CasebookEntryDraft,
 } from '../shared/generation-state';
 
@@ -116,14 +116,14 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
 
   // If referential integrity is broken, bail early
   if (errors.length > 0) {
-    const result: DiscoveryGraphResult = {
+    const result: CasebookValidationResult = {
       valid: false,
       errors,
       warnings,
       reachableFactIds: [],
       reachableEntryIds: [],
     };
-    return { ...state, discoveryGraphResult: result };
+    return { ...state, casebookValidationResult: result };
   }
 
   // ── Bipartite BFS: facts ↔ entries ───────────────────────────────
@@ -185,16 +185,16 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     );
   }
 
-  const result: DiscoveryGraphResult = {
+  const result: CasebookValidationResult = {
     valid: errors.length === 0,
     errors,
-    warnings: warnings.length > 0 ? warnings : undefined,
+    warnings,
     reachableFactIds: [...reachableFacts],
     reachableEntryIds: [...reachableEntries],
   };
 
   return {
     ...state,
-    discoveryGraphResult: result,
+    casebookValidationResult: result,
   };
 };

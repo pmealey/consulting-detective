@@ -3,45 +3,46 @@ import {
   GenerateFactsOutputSchema,
   type CaseGenerationState,
   type FactDraft,
-  type FactPlaceholder,
+  type FactSkeleton,
 } from '../shared/generation-state';
 
 /**
  * Pipeline Step 7: Generate Facts
  *
- * Receives all fact placeholders from ComputeFacts (step 6). Each placeholder
- * already has subjects, veracity, and source context determined. The AI's job
- * is narrower and well-defined: provide a factId, a rich description, and a
- * category for each placeholder.
+ * Receives all fact skeletons from ComputeFacts (step 6). Each skeleton
+ * already has a canonical factId, subjects, veracity, and source context
+ * determined. The AI's job is narrower and well-defined: provide a rich
+ * description and a category for each fact.
  *
- * After the AI responds, we merge its output with the placeholder data to
- * produce the final Record<string, FactDraft> that downstream steps consume.
+ * After the AI responds, we merge its output with the skeleton data to
+ * produce the final Record<string, FactDraft> keyed by factId. The factId
+ * is the same one assigned in ComputeFacts — events, characters,
+ * computedKnowledge, and factGraph all reference facts by this ID.
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template, events, characters, locations, factPlaceholders, factValidationResult } = state;
+  const { input, template, events, characters, locations, factSkeletons, factValidationResult } = state;
 
   if (!template) throw new Error('GenerateFacts requires template from step 1');
   if (!events) throw new Error('GenerateFacts requires events from step 2');
   if (!characters) throw new Error('GenerateFacts requires characters from step 3');
   if (!locations) throw new Error('GenerateFacts requires locations from step 4');
-  if (!factPlaceholders || factPlaceholders.length === 0) {
-    throw new Error('GenerateFacts requires factPlaceholders from ComputeFacts');
+  if (!factSkeletons || factSkeletons.length === 0) {
+    throw new Error('GenerateFacts requires factSkeletons from ComputeFacts');
   }
 
-  const systemPrompt = `You are a mystery designer for a detective mystery game. You are given a set of fact placeholders — structural slots that have already been determined by the game engine. Each placeholder has:
+  const systemPrompt = `You are a mystery designer for a detective mystery game. You are given a set of facts — structural slots that have already been determined by the game engine. Each fact has:
 
-- A placeholder ID (your key for the output)
+- A fact ID (your key for the output)
 - Subjects (characterIds and locationIds the fact is about)
 - Veracity ("true" or "false" — false facts are misinformation)
-- Source context (where the placeholder came from: an event reveal, a character's denial, a bridge connection, or a red herring)
+- Source context (where the fact came from: an event reveal, a character's denial, a bridge connection, or a red herring)
 
-Your job is to provide three things for each placeholder:
+Your job is to provide two things for each fact:
 
-1. **factId** — a descriptive snake_case identifier (e.g. "fact_victim_left_handed")
-2. **description** — a clear, specific, concrete description of what a detective discovers
-3. **category** — one of the 8 categories below
+1. **description** — a clear, specific, concrete description of what a detective discovers
+2. **category** — one of the 8 categories below
 
-Your response must end with valid JSON: a Record<placeholderId, { factId, description, category }>.
+Your response must end with valid JSON: a Record<factId, { description, category }>.
 
 ## Fact Categories
 
@@ -59,15 +60,14 @@ Your response must end with valid JSON: a Record<placeholderId, { factId, descri
 - Descriptions should be what a detective discovers, not authorial commentary.
 - Be specific and concrete: "The victim owed Blackwood £400" not "The victim had debts."
 - For **false facts** (veracity: "false"): write the description as the misinformation itself — what the lying/mistaken character would claim. It should sound plausible.
-- For **denial** placeholders: the false fact should be a plausible counter-narrative to the denied true fact. Look at the denied fact's context to craft a convincing lie.
-- For **bridge** placeholders: create a natural connection between the two subjects (e.g. a relationship, a shared history, a rumor).
-- For **red herring** placeholders: create something interesting but ultimately irrelevant — a suspicious detail, an old grudge, a coincidence.
-- Every factId must be unique across all placeholders.
+- For **denial** facts: the false fact should be a plausible counter-narrative to the denied true fact. Look at the denied fact's context to craft a convincing lie.
+- For **bridge** facts: create a natural connection between the two subjects (e.g. a relationship, a shared history, a rumor).
+- For **red herring** facts: create something interesting but ultimately irrelevant — a suspicious detail, an old grudge, a coincidence.
 - Category should match the nature of the fact, not just its source.
 - Think about how facts form a coherent mystery narrative. Facts from the same event should tell a consistent story.`;
 
-  const placeholderDescriptions = factPlaceholders.map((p) =>
-    formatPlaceholderForPrompt(p, state),
+  const skeletonDescriptions = factSkeletons.map((s) =>
+    formatSkeletonForPrompt(s, state),
   );
 
   const userPrompt = `Here is the case context:
@@ -85,15 +85,15 @@ ${Object.values(characters).map((c) => `  - ${c.characterId}: ${c.name} (${c.mys
 Locations:
 ${Object.values(locations).map((l) => `  - ${l.locationId}: ${l.name} (${l.type})`).join('\n')}
 
-## Fact Placeholders to Fill (${factPlaceholders.length} total)
+## Facts to Fill (${factSkeletons.length} total)
 
-For each placeholder below, provide a factId, description, and category.
+For each fact below, provide description and category. The key in your JSON must be the factId shown.
 
-${placeholderDescriptions.join('\n\n')}
+${skeletonDescriptions.join('\n\n')}
 
 First, briefly reason through the narrative: what story do these facts tell together? How do the false facts create confusion? How do the bridge facts connect different threads? Then provide the JSON.
 
-Your JSON must be a Record<placeholderId, { factId, description, category }> with exactly ${factPlaceholders.length} entries — one for each placeholder listed above.${
+Your JSON must be a Record<factId, { description, category }> with exactly ${factSkeletons.length} entries — one for each fact listed above.${
     factValidationResult && !factValidationResult.valid
       ? `
 
@@ -115,24 +115,24 @@ ${factValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
     (raw) => GenerateFactsOutputSchema.parse(raw),
   );
 
-  // Merge AI output with placeholder data to produce final FactDraft records
+  // Merge AI output with skeleton data to produce final FactDraft records.
   const facts: Record<string, FactDraft> = {};
-  const placeholderMap = new Map(factPlaceholders.map((p) => [p.placeholderId, p]));
+  const skeletonMap = new Map(factSkeletons.map((s) => [s.factId, s]));
 
-  for (const [placeholderId, aiEntry] of Object.entries(aiOutput)) {
-    const placeholder = placeholderMap.get(placeholderId);
-    if (!placeholder) {
-      // AI returned an entry for a placeholder that doesn't exist — skip it.
-      // ValidateFacts will catch missing placeholders.
+  for (const [factId, aiEntry] of Object.entries(aiOutput)) {
+    const skeleton = skeletonMap.get(factId);
+    if (!skeleton) {
+      // AI returned an entry for a factId that doesn't exist — skip it.
+      // ValidateFacts will catch missing facts.
       continue;
     }
 
-    facts[aiEntry.factId] = {
-      factId: aiEntry.factId,
+    facts[factId] = {
+      factId,
       description: aiEntry.description,
       category: aiEntry.category,
-      subjects: [...placeholder.subjects],
-      veracity: placeholder.veracity,
+      subjects: [...skeleton.subjects],
+      veracity: skeleton.veracity,
     };
   }
 
@@ -147,40 +147,40 @@ ${factValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
 // ============================================
 
 /**
- * Formats a single placeholder for the AI prompt, including source context
- * so the AI can write appropriate descriptions.
+ * Formats a single fact skeleton for the AI prompt, including source
+ * context so the AI can write appropriate descriptions.
  */
-function formatPlaceholderForPrompt(
-  placeholder: FactPlaceholder,
+function formatSkeletonForPrompt(
+  skeleton: FactSkeleton,
   state: CaseGenerationState,
 ): string {
   const { events, characters, locations } = state;
-  const subjectNames = placeholder.subjects.map((id) => {
+  const subjectNames = skeleton.subjects.map((id) => {
     if (characters?.[id]) return `${id} (${characters[id].name})`;
     if (locations?.[id]) return `${id} (${locations[id].name})`;
     return id;
   });
 
   let sourceContext = '';
-  switch (placeholder.source.type) {
+  switch (skeleton.source.type) {
     case 'event_reveal': {
-      const event = events?.[placeholder.source.eventId];
+      const event = events?.[skeleton.source.eventId];
       sourceContext = event
         ? `From event "${event.eventId}": ${event.description}`
-        : `From event "${placeholder.source.eventId}"`;
+        : `From event "${skeleton.source.eventId}"`;
       break;
     }
     case 'denial': {
-      const denier = characters?.[placeholder.source.characterId];
-      sourceContext = `Denial by ${denier?.name ?? placeholder.source.characterId} — this is a FALSE counter-narrative to the true fact "${placeholder.source.deniedFactId}". Write what the character falsely claims.`;
+      const denier = characters?.[skeleton.source.characterId];
+      sourceContext = `Denial by ${denier?.name ?? skeleton.source.characterId} — this is a FALSE counter-narrative to the true fact "${skeleton.source.deniedFactId}". Write what the character falsely claims.`;
       break;
     }
     case 'bridge': {
-      const fromChar = characters?.[placeholder.source.fromCharacterId];
-      const toSubjectName = characters?.[placeholder.source.toSubject]?.name
-        ?? locations?.[placeholder.source.toSubject]?.name
-        ?? placeholder.source.toSubject;
-      sourceContext = `Bridge fact: connects ${fromChar?.name ?? placeholder.source.fromCharacterId} to ${toSubjectName}. Create a natural connection (relationship, shared history, rumor, etc.)`;
+      const fromChar = characters?.[skeleton.source.fromCharacterId];
+      const toSubjectName = characters?.[skeleton.source.toSubject]?.name
+        ?? locations?.[skeleton.source.toSubject]?.name
+        ?? skeleton.source.toSubject;
+      sourceContext = `Bridge fact: connects ${fromChar?.name ?? skeleton.source.fromCharacterId} to ${toSubjectName}. Create a natural connection (relationship, shared history, rumor, etc.)`;
       break;
     }
     case 'red_herring': {
@@ -189,8 +189,8 @@ function formatPlaceholderForPrompt(
     }
   }
 
-  return `### ${placeholder.placeholderId}
+  return `### ${skeleton.factId}
   Subjects: [${subjectNames.join(', ')}]
-  Veracity: ${placeholder.veracity}
+  Veracity: ${skeleton.veracity}
   Source: ${sourceContext}`;
 }

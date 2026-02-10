@@ -21,7 +21,7 @@ import {
  * entries for false beliefs. It must NOT add new 'knows' entries beyond the baseline.
  *
  * Also produces a roleId -> characterId mapping that is used to rewrite
- * all role ID placeholders in the event chain with real character IDs.
+ * all role IDs in the event chain with real character IDs.
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
   const { input, template, events, computedKnowledge } = state;
@@ -55,7 +55,7 @@ Each Character must match:
   "societalRole": string,          // occupation/station ONLY — e.g. "Landlady", "Business partner". This is shown to players. NEVER use Victim, Witness, Suspect here.
   "description": string,           // physical/personality sketch (2-3 sentences)
   "motivations": string[],         // desires, fears, secrets, grudges, loyalties (2-5 items)
-  "knowledgeState": Record<string, string>,  // factPlaceholderId -> "knows" | "suspects" | "hides" | "denies" | "believes"
+  "knowledgeState": Record<string, string>,  // factId -> "knows" | "suspects" | "hides" | "denies" | "believes"
   "tone": {
     "register": string,            // e.g. "formal", "nervous", "brusque", etc.
     "vocabulary": string[],        // 3-5 characteristic words/phrases
@@ -64,7 +64,7 @@ Each Character must match:
   "currentStatus": string | undefined   // optional: status at investigation time, e.g. "deceased", "missing", "imprisoned", "traveling", "ill"
 }
 
-CRITICAL: The "roleMapping" must map EVERY roleId from the template to the characterId you create for it. This mapping is used to replace role placeholders in the event chain with real character IDs.
+CRITICAL: The "roleMapping" must map EVERY roleId from the template to the characterId you create for it. This mapping is used to replace role IDs in the event chain with real character IDs.
 
 ## Knowledge State Rules
 
@@ -78,7 +78,7 @@ Your job is to START from the baseline and MODIFY entries based on character per
 - You may DOWNGRADE an entry to "denies" (aware but actively claims the opposite — the corresponding false fact will be created programmatically later)
 - You may ADD new "believes" entries for false beliefs the character holds (things they genuinely think are true but aren't)
 - You must NOT add new "knows" entries that aren't in the baseline — if a character wasn't involved in an event, they can't know what it revealed
-- Every fact placeholder from the baseline MUST appear in the character's knowledgeState (don't drop any)
+- Every fact from the baseline MUST appear in the character's knowledgeState (don't drop any)
 
 ## Other Guidelines
 - Create one character per template role. The characterId should be name-based (e.g. role_suspect_1 -> char_charles_blackwood).
@@ -144,7 +144,7 @@ ${characterValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
   // If the AI changed it to a valid non-'knows' status, keep the AI's choice.
   enforceBaselineKnowledge(characters, roleMapping, computedKnowledge);
 
-  // Remap role ID placeholders in events to real character IDs
+  // Remap role IDs in events to real character IDs
   const remappedEvents: Record<string, EventDraft> = {};
 
   for (const [eventId, event] of Object.entries(events)) {
@@ -174,7 +174,7 @@ ${characterValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
 
 /**
  * Formats the pre-computed baseline knowledge for inclusion in the user prompt.
- * Shows each role and the fact placeholders they would know from event involvement.
+ * Shows each role and the factIds they would know from event involvement.
  */
 function formatBaselineKnowledge(
   computedKnowledge: ComputedKnowledge,

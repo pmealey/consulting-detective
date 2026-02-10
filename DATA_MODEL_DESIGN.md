@@ -106,7 +106,7 @@ flowchart TD
 
 5. **GenerateLocations** + **ValidateLocations**: Build the spatial world (accessibility, perception edges). Receives location reveals from ComputeEventKnowledge. Validation checks references.
 
-6. **ComputeFacts** (programmatic): Build the fact–subject graph. Collect true fact placeholders from event reveals; create false fact placeholders from denials; detect disconnected components and add bridge facts; add red herring placeholders. Outputs fact placeholders (subjects, veracity, source) and the bipartite graph.
+6. **ComputeFacts** (programmatic): Build the fact–subject graph. Collect true fact skeletons from event reveals; create false fact skeletons from denials; detect disconnected components and add bridge facts; add red herring skeletons. Outputs fact skeletons (factId, subjects, veracity, source) and the bipartite graph.
 
 7. **GenerateFacts** + **ValidateFacts**: AI expands each placeholder into a full fact (factId, description, category). Subjects and veracity are already set. Validation checks categories and subject referential integrity.
 

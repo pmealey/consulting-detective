@@ -100,7 +100,7 @@ export interface CaseGenerationState {
   generateLocationsRetries?: number;
 
   // -- Step 5: Compute Facts --
-  factPlaceholders?: FactPlaceholder[];
+  factSkeletons?: FactSkeleton[];
   factGraph?: FactGraph;
 
   // -- Step 6: Generate Facts --
@@ -120,8 +120,9 @@ export interface CaseGenerationState {
   casebook?: Record<string, CasebookEntryDraft>;
 
   // -- Step 8b: Validate Casebook --
-  discoveryGraphResult?: DiscoveryGraphResult;
-  /** Number of times GenerateCasebook has been retried after graph validation failure */
+  /** Result of casebook validation (reachability from introduction facts; reachableFactIds used by ValidateQuestions). */
+  casebookValidationResult?: CasebookValidationResult;
+  /** Number of times GenerateCasebook has been retried after casebook validation failure */
   generateCasebookRetries?: number;
 
   // -- Step 9: Generate Prose (scenes only) --
@@ -262,11 +263,14 @@ export interface ValidationResult {
   warnings: string[];
 }
 
-export interface DiscoveryGraphResult {
+/** Result of Validate Casebook: same as ValidationResult plus reachability sets used by ValidateQuestions. */
+export interface CasebookValidationResult {
   valid: boolean;
   errors: string[];
-  warnings?: string[];
+  warnings: string[];
+  /** Fact IDs reachable from introduction facts (BFS); required for question-answer reachability checks. */
   reachableFactIds: string[];
+  /** Casebook entry IDs unlockable from introduction facts. */
   reachableEntryIds: string[];
 }
 
@@ -280,28 +284,30 @@ export interface DiscoveryGraphResult {
  * (characters don't exist yet at this pipeline stage).
  */
 export interface ComputedKnowledge {
-  /** Baseline knowledge per role: roleId -> factPlaceholderId -> 'knows' */
+  /** Baseline knowledge per role: roleId -> factId -> 'knows' */
   roleKnowledge: Record<string, Record<string, 'knows'>>;
-  /** Facts discoverable as physical evidence at each location: locationPlaceholderId -> factPlaceholderIds */
+  /** Facts discoverable as physical evidence at each location: locationId -> factIds */
   locationReveals: Record<string, string[]>;
 }
 
 /**
- * A fact placeholder produced by ComputeFacts, before the AI fills in
- * description and category in GenerateFacts.
+ * A fact skeleton produced by ComputeFacts: the structural frame of a fact
+ * (ID, subjects, veracity, source) before GenerateFacts fills in description
+ * and category. The factId assigned here is the canonical ID used throughout
+ * the entire pipeline.
  */
-export interface FactPlaceholder {
-  /** Placeholder ID, e.g. "fact_suspect_left_handed" */
-  placeholderId: string;
+export interface FactSkeleton {
+  /** Canonical fact ID — persists unchanged through the entire pipeline */
+  factId: string;
   /** characterIds and locationIds this fact is about */
   subjects: string[];
   /** Whether this is a true or false fact */
   veracity: 'true' | 'false';
-  /** Where this placeholder originated */
-  source: FactPlaceholderSource;
+  /** Where this fact originated */
+  source: FactSkeletonSource;
 }
 
-export type FactPlaceholderSource =
+export type FactSkeletonSource =
   | { type: 'event_reveal'; eventId: string }
   | { type: 'denial'; characterId: string; deniedFactId: string }
   | { type: 'bridge'; fromCharacterId: string; toSubject: string }
@@ -312,9 +318,9 @@ export type FactPlaceholderSource =
  * Used by GenerateIntroduction and GenerateCasebook for connectivity analysis.
  */
 export interface FactGraph {
-  /** factPlaceholderId -> subject IDs (characterIds and locationIds) */
+  /** factId -> subject IDs (characterIds and locationIds) */
   factToSubjects: Record<string, string[]>;
-  /** subjectId -> factPlaceholderIds that this subject can reveal */
+  /** subjectId -> factIds that this subject can reveal */
   subjectToFacts: Record<string, string[]>;
 }
 
@@ -433,16 +439,13 @@ export const FactsSchema = z.record(
 );
 
 /**
- * Schema for GenerateFacts AI output: the AI provides factId, description,
- * and category for each placeholder. Subjects and veracity come from the
- * placeholder and are merged programmatically after validation.
- *
- * Keyed by placeholderId so we can match AI output back to placeholders.
+ * Schema for GenerateFacts AI output: the AI provides description and category
+ * for each fact skeleton. Subjects and veracity come from the skeleton and are
+ * merged programmatically. Keyed by factId (from the skeleton).
  */
 export const GenerateFactsOutputSchema = z.record(
   z.string(),
   z.object({
-    factId: z.string().min(1),
     description: z.string().min(5),
     category: z.enum([
       'motive', 'means', 'opportunity', 'alibi',

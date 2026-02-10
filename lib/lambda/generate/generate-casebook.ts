@@ -33,7 +33,7 @@ import {
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
   const {
     input, template, events, characters, locations, facts,
-    introductionFactIds, factGraph, computedKnowledge, discoveryGraphResult,
+    introductionFactIds, factGraph, computedKnowledge, casebookValidationResult,
   } = state;
 
   if (!template) throw new Error('Step 8 requires template from step 1');
@@ -119,14 +119,14 @@ ${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.my
 ${Object.values(locations).map((l) => `  - ${l.locationId} (${l.name}): ${l.type} — ${l.description}`).join('\n')}
 
 Provide the JSON with labels, addresses, and character assignments for each entry. Labels and addresses must match the mystery style above.${
-  discoveryGraphResult && !discoveryGraphResult.valid
+  casebookValidationResult && !casebookValidationResult.valid
     ? `
 
 ## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
 
 Your previous casebook polish failed validation. Fix these errors:
 
-${discoveryGraphResult.errors.map((e) => `- ${e}`).join('\n')}`
+${casebookValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
     : ''
 }`;
 

@@ -10,13 +10,17 @@ import type {
  *
  * Pure logic — no LLM call. Validates:
  * - Every event.location references a valid locationId
+ * - Every event reveal subject is either a roleId (mapped to a character) or a valid locationId
  * - Every location.accessibleFrom entry references a valid locationId
  * - (Warning) Symmetric adjacency: if A is in B's accessibleFrom, B should be in A's accessibleFrom
  *
- * On failure, the Step Function retries BuildLocations.
+ * Catching invalid reveal subjects here ensures we fail before ComputeFacts/GenerateFacts.
+ * On retry, GenerateLocations receives these errors and can add the missing location(s).
+ *
+ * On failure, the Step Function retries GenerateLocations.
  */
 export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { events, locations } = state;
+  const { events, locations, roleMapping } = state;
 
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -39,6 +43,19 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
         errors.push(
           `Event ${event.eventId}: location "${event.location}" is not a valid locationId`,
         );
+      }
+      // Every reveal subject must be either a roleId (→ character) or a locationId.
+      // This catches cases where GenerateEvents used a location placeholder
+      // that GenerateLocations did not define, so we fail here and retry locations.
+      for (const reveal of event.reveals ?? []) {
+        for (const subjectId of reveal.subjects ?? []) {
+          const isRole = roleMapping && subjectId in roleMapping;
+          if (!isRole && !locationIds.has(subjectId)) {
+            errors.push(
+              `Event ${event.eventId} reveal "${reveal.id}": subject "${subjectId}" is not a valid characterId or locationId — create a location with locationId "${subjectId}"`,
+            );
+          }
+        }
       }
     }
   }
