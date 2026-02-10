@@ -1,6 +1,7 @@
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, CASES_TABLE } from '../shared/db';
-import type { CaseGenerationState } from '../shared/generation-state';
+import { getDraft, deleteDraft } from '../shared/draft-db';
+import type { OperationalState } from '../shared/generation-state';
 import type { Case } from '../../types/case';
 import type { CausalEvent, EventReveal, InvolvementType, EventNecessity } from '../../types/event';
 import type { Character } from '../../types/character';
@@ -12,17 +13,13 @@ import type { Question, QuestionAnswer } from '../../types/question';
 import type { Difficulty } from '../../types/common';
 
 /**
- * Pipeline Step 11: Store Case in DynamoDB
+ * Pipeline Step 12: Store Case in DynamoDB
  *
- * Assembles the generation state into a final Case object matching
- * the canonical type definitions, then writes it to DynamoDB.
+ * Loads the draft from the draft table, assembles it into a final Case,
+ * writes to the cases table, then deletes the draft.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const {
-    input, template, events, characters, locations, facts,
-    casebook, prose, introduction, title, questions, optimalPath,
-    introductionFactIds, validationResult,
-  } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { input, draftId, validationResult } = state;
 
   if (!validationResult?.valid) {
     throw new Error(
@@ -30,6 +27,15 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       `Errors: ${validationResult?.errors.join('; ')}`,
     );
   }
+
+  const draft = await getDraft(draftId);
+  if (!draft) throw new Error('Cannot store case: draft not found');
+
+  const {
+    template, events, characters, locations, facts,
+    casebook, prose, introduction, title, questions, optimalPath,
+    introductionFactIds,
+  } = draft;
 
   if (!template || !events || !characters || !locations || !facts ||
       !casebook || !prose || !introduction || !title || !questions || !optimalPath ||
@@ -138,7 +144,6 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     difficulty: template.difficulty as Difficulty,
   };
 
-  // Write to DynamoDB
   await docClient.send(
     new PutCommand({
       TableName: CASES_TABLE,
@@ -146,5 +151,6 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     }),
   );
 
+  await deleteDraft(draftId);
   return state;
 };

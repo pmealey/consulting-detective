@@ -1,7 +1,8 @@
 import { callModel } from '../shared/bedrock';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import {
   EventsSchema,
-  type CaseGenerationState,
+  type OperationalState,
 } from '../shared/generation-state';
 
 /**
@@ -10,9 +11,10 @@ import {
  * Fills the template's event slots with specific details:
  * agents, locations, timestamps, involvement maps, and causality edges.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template } = state;
-
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { input, draftId } = state;
+  const draft = await getDraft(draftId);
+  const template = draft?.template;
   if (!template) throw new Error('Step 2 requires template from step 1');
 
   const systemPrompt = `You are a mystery narrative architect. Given a case template, you flesh out the event slots into a complete causal event chain — the backbone of what actually happened in the story.
@@ -75,7 +77,7 @@ Guidelines:
 - INVOLVEMENT DENSITY: Most events should involve 3+ characters (the agent plus at least 2 others as participants, witnesses, or bystanders). This is critical — multiple sources of information per fact make the mystery investigable from different angles.
 - Only 1-2 key events (e.g. a secret act of sabotage, a solitary theft) should have just the agent or agent + one other. If an event happens in a public or semi-public place, think about who else was nearby.`;
 
-  const eventValidationResult = state.eventValidationResult;
+  const validationResult = state.validationResult;
   const userPrompt = `Here is the case template to work from:
 
 Crime Type: ${template.crimeType}
@@ -90,14 +92,14 @@ Character Roles:
 ${template.characterRoles.map((r) => `  - ${r.roleId}: ${r.role} — ${r.description}`).join('\n')}
 
 Generate the full event chain. Think through the causal logic first, then provide the JSON object keyed by eventId.${
-    eventValidationResult && !eventValidationResult.valid
+    validationResult && !validationResult.valid
       ? `
 
 ## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
 
 Your previous output failed validation. You MUST fix these errors:
 
-${eventValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
+${validationResult.errors.map((e) => `- ${e}`).join('\n')}`
       : ''
   }`;
 
@@ -111,8 +113,6 @@ ${eventValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
     (raw) => EventsSchema.parse(raw),
   );
 
-  return {
-    ...state,
-    events,
-  };
+  await updateDraft(draftId, { events });
+  return state;
 };

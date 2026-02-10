@@ -1,7 +1,8 @@
+import { getDraft, updateDraft } from '../shared/draft-db';
 import type {
-  CaseGenerationState,
   ComputedKnowledge,
   EventDraft,
+  OperationalState,
 } from '../shared/generation-state';
 
 /**
@@ -31,19 +32,18 @@ import type {
  * that the AI can then modify (downgrade to 'suspects', 'hides', 'denies',
  * or add 'believes' entries for false beliefs).
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { events } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { draftId, input } = state;
+  const draft = await getDraft(draftId);
+  const events = draft?.events;
 
   if (!events || Object.keys(events).length === 0) {
     throw new Error('ComputeEventKnowledge requires events from GenerateEvents');
   }
 
   const computedKnowledge = computeEventKnowledge(events);
-
-  return {
-    ...state,
-    computedKnowledge,
-  };
+  await updateDraft(draftId, { computedKnowledge });
+  return state;
 };
 
 /**

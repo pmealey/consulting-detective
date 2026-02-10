@@ -1,7 +1,8 @@
 import { callModel } from '../shared/bedrock';
+import { updateDraft } from '../shared/draft-db';
 import {
   CaseTemplateSchema,
-  type CaseGenerationState,
+  type OperationalState,
 } from '../shared/generation-state';
 
 /**
@@ -61,8 +62,8 @@ const SETTING_FLAVORS = [
  * Given difficulty + optional crime type, generates a template:
  * crime type, required event slots, character roles, era/setting.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { input, draftId } = state;
   const difficulty = input.difficulty ?? 'medium';
 
   // Pick a random setting flavor to suggest variety
@@ -192,8 +193,6 @@ Think through your creative choices first, then provide the JSON object.`;
     (raw) => CaseTemplateSchema.parse(raw),
   );
 
-  return {
-    ...state,
-    template,
-  };
+  await updateDraft(draftId, { template });
+  return state;
 };

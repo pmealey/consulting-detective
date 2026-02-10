@@ -1,7 +1,8 @@
 import { callModel } from '../shared/bedrock';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import {
   QuestionsSchema,
-  type CaseGenerationState,
+  type OperationalState,
 } from '../shared/generation-state';
 
 /**
@@ -12,8 +13,10 @@ import {
  * Answer types: person (characterIds), location (locationIds), fact (factIds + factCategory).
  * False facts (veracity: "false") are excluded from acceptable answers.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template, events, characters, facts, casebook } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { input, draftId } = state;
+  const draft = await getDraft(draftId);
+  const { template, events, characters, facts, casebook, locations } = draft ?? {};
 
   if (!template) throw new Error('GenerateQuestions requires template from step 1');
   if (!events) throw new Error('GenerateQuestions requires events from step 2');
@@ -79,7 +82,7 @@ CRITICAL: "Who" questions MUST use \`answer.type: "person"\` with characterIds �
 - Try to cover a variety of answer types. Don't make every question a "Who" question.
 - Point values: easy=5-10, medium=10-15, hard=15-20.`;
 
-  const questionValidationResult = state.questionValidationResult;
+  const validationResult = state.validationResult;
   const userPrompt = `Here is the case context:
 
 Title: ${template.title}
@@ -93,7 +96,7 @@ Characters (valid characterIds for "person" answer type):
 ${Object.values(characters).map((c) => `  - ${c.characterId}: ${c.name} (${c.mysteryRole}, ${c.societalRole})`).join('\n')}
 
 Locations (valid locationIds for "location" answer type):
-${Object.values(state.locations!).map((l) => `  - ${l.locationId}: ${l.name} (${l.type})`).join('\n')}
+${locations ? Object.values(locations).map((l) => `  - ${l.locationId}: ${l.name} (${l.type})`).join('\n') : ''}
 
 Available facts (valid factIds for "fact" answer type — do NOT use false facts as answers):
 ${Object.values(facts).filter((f) => f.veracity !== 'false').map((f) => `  - ${f.factId} [${f.category}]: ${f.description}`).join('\n')}
@@ -102,14 +105,14 @@ Where facts are found (casebook entries):
 ${Object.values(casebook).map((e) => `  - ${e.label}: reveals [${e.revealsFactIds.join(', ')}]`).join('\n')}
 
 Design the quiz. For "person" answers, use characterIds. For "location" answers, use locationIds. For "fact" answers, use factIds and set factCategory. Think through the key deductions first, then provide the JSON array.${
-    questionValidationResult && !questionValidationResult.valid
+    validationResult && !validationResult.valid
       ? `
 
 ## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
 
 Your previous output failed validation. You MUST fix these errors:
 
-${questionValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
+${validationResult.errors.map((e) => `- ${e}`).join('\n')}`
       : ''
   }`;
 
@@ -123,8 +126,6 @@ ${questionValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
     (raw) => QuestionsSchema.parse(raw),
   );
 
-  return {
-    ...state,
-    questions,
-  };
+  await updateDraft(draftId, { questions });
+  return state;
 };

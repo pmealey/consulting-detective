@@ -1,5 +1,6 @@
+import { getDraft } from '../shared/draft-db';
 import type {
-  CaseGenerationState,
+  OperationalState,
   ValidationResult,
 } from '../shared/generation-state';
 
@@ -15,36 +16,33 @@ import type {
  *
  * On failure, the Step Function retries GenerateQuestions.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { questions, facts, characters, locations, casebookValidationResult } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { draftId } = state;
+  const draft = await getDraft(draftId);
+  const { questions, facts, characters, locations } = draft ?? {};
+  const casebookValidationResult =
+    state.validationResult && 'reachableFactIds' in state.validationResult
+      ? state.validationResult
+      : undefined;
 
   const errors: string[] = [];
   const warnings: string[] = [];
 
   if (!questions || questions.length === 0) {
     errors.push('No questions in state');
-    return {
-      ...state,
-      questionValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   if (!facts || Object.keys(facts).length === 0) {
     errors.push('No facts in state; cannot validate question answers');
-    return {
-      ...state,
-      questionValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   if (!casebookValidationResult?.valid || !casebookValidationResult.reachableFactIds) {
     errors.push(
       'Casebook validation was not run or is invalid; cannot verify question-fact reachability',
     );
-    return {
-      ...state,
-      questionValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   const factIds = new Set(Object.keys(facts));
@@ -128,8 +126,5 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   const valid = errors.length === 0;
   const questionValidationResult: ValidationResult = { valid, errors, warnings };
 
-  return {
-    ...state,
-    questionValidationResult,
-  };
+  return { ...state, validationResult: questionValidationResult };
 };

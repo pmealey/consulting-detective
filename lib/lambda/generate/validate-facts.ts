@@ -1,5 +1,6 @@
+import { getDraft } from '../shared/draft-db';
 import type {
-  CaseGenerationState,
+  OperationalState,
   ValidationResult,
   FactDraft,
   FactSkeleton,
@@ -24,42 +25,32 @@ const VALID_CATEGORIES = new Set([
  * If validation fails, the Step Function retries GenerateFacts with
  * error context (up to 2 retries).
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { facts, factSkeletons, characters, locations } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { draftId } = state;
+  const draft = await getDraft(draftId);
+  const { facts, factSkeletons, characters, locations } = draft ?? {};
 
   const errors: string[] = [];
   const warnings: string[] = [];
 
   if (!facts || Object.keys(facts).length === 0) {
     errors.push('No facts in state — GenerateFacts produced no output');
-    return {
-      ...state,
-      factValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   if (!factSkeletons || factSkeletons.length === 0) {
     errors.push('No factSkeletons in state — ComputeFacts must run first');
-    return {
-      ...state,
-      factValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   if (!characters) {
     errors.push('No characters in state');
-    return {
-      ...state,
-      factValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   if (!locations) {
     errors.push('No locations in state');
-    return {
-      ...state,
-      factValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   const allCharacterIds = new Set(Object.keys(characters));
@@ -158,8 +149,5 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     warnings,
   };
 
-  return {
-    ...state,
-    factValidationResult: result,
-  };
+  return { ...state, validationResult: result };
 };

@@ -1,11 +1,12 @@
+import { getDraft, updateDraft } from '../shared/draft-db';
 import type {
-  CaseGenerationState,
   CharacterDraft,
   ComputedKnowledge,
   EventDraft,
   FactGraph,
   FactSkeleton,
   LocationDraft,
+  OperationalState,
 } from '../shared/generation-state';
 
 /**
@@ -47,8 +48,10 @@ import type {
  * connectivity, any introduction fact selection will be able to reach
  * all subjects and facts through BFS.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { events, characters, locations, computedKnowledge, roleMapping } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { draftId, input } = state;
+  const draft = await getDraft(draftId);
+  const { events, characters, locations, computedKnowledge, roleMapping } = draft ?? {};
 
   if (!events || Object.keys(events).length === 0) {
     throw new Error('ComputeFacts requires events from GenerateEvents');
@@ -74,11 +77,8 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     roleMapping,
   );
 
-  return {
-    ...state,
-    factSkeletons,
-    factGraph,
-  };
+  await updateDraft(draftId, { factSkeletons, factGraph });
+  return state;
 };
 
 /**

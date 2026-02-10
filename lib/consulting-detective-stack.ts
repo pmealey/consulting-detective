@@ -36,6 +36,19 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     const { casesTable } = props;
 
     // ============================================
+    // Draft Cases Table (temporary generation state)
+    // ============================================
+    // Holds in-progress case drafts keyed by Step Function execution ID.
+    // No RETAIN — safe to delete on stack destroy.
+
+    const draftCasesTable = new dynamodb.Table(this, 'DraftCasesTable', {
+      tableName: 'ConsultingDetective-DraftCases',
+      partitionKey: { name: 'draftId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // ============================================
     // Lambda Environment Variables
     // ============================================
 
@@ -88,6 +101,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
 
     const generationEnvironment = {
       ...lambdaEnvironment,
+      DRAFT_CASES_TABLE_NAME: draftCasesTable.tableName,
       BEDROCK_DEFAULT_MODEL_ID: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
     };
 
@@ -255,8 +269,32 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       handler.addToRolePolicy(marketplacePolicy);
     }
 
-    // DynamoDB write for store step
+    // DynamoDB: store step writes cases; all generation steps read/write drafts
     casesTable.grantWriteData(storeCaseHandler);
+    const generationHandlers = [
+      generateTemplateHandler,
+      generateEventsHandler,
+      computeEventKnowledgeHandler,
+      generateCharactersHandler,
+      validateEventsHandler,
+      validateCharactersHandler,
+      generateLocationsHandler,
+      validateLocationsHandler,
+      computeFactsHandler,
+      generateFactsHandler,
+      validateFactsHandler,
+      generateIntroductionHandler,
+      generateCasebookHandler,
+      validateCasebookHandler,
+      generateProseHandler,
+      generateQuestionsHandler,
+      validateQuestionsHandler,
+      computeOptimalPathHandler,
+      storeCaseHandler,
+    ];
+    for (const h of generationHandlers) {
+      draftCasesTable.grantReadWriteData(h);
+    }
 
     // ============================================
     // Generation Pipeline — Step Functions
@@ -364,51 +402,61 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     });
 
     const initEventsRetries = new sfn.Pass(this, 'InitEventsRetries', {
-      resultPath: '$.generateEventsRetries',
-      result: sfn.Result.fromNumber(0),
+      parameters: {
+        'input.$': '$.input',
+        'draftId.$': '$.draftId',
+        'stepRetries': 0,
+      },
     });
 
     const incrementEventsRetries = new sfn.Pass(this, 'IncrementEventsRetries', {
       parameters: {
         'input.$': '$.input',
-        'template.$': '$.template',
-        'events.$': '$.events',
-        'eventValidationResult.$': '$.eventValidationResult',
-        'generateEventsRetries': sfn.JsonPath.mathAdd(
-          sfn.JsonPath.numberAt('$.generateEventsRetries'),
-          1,
-        ),
+        'draftId.$': '$.draftId',
+        'validationResult.$': '$.validationResult',
+        'stepRetries': sfn.JsonPath.mathAdd(sfn.JsonPath.numberAt('$.stepRetries'), 1),
       },
     });
 
-    // Init states for next stages (defined early so Choice states can reference them)
     const initGenerateCharactersRetries = new sfn.Pass(this, 'InitGenerateCharactersRetries', {
-      resultPath: '$.generateCharactersRetries',
-      result: sfn.Result.fromNumber(0),
+      parameters: {
+        'input.$': '$.input',
+        'draftId.$': '$.draftId',
+        'stepRetries': 0,
+      },
     });
 
     const initGenerateLocationsRetries = new sfn.Pass(this, 'InitGenerateLocationsRetries', {
-      resultPath: '$.generateLocationsRetries',
-      result: sfn.Result.fromNumber(0),
+      parameters: {
+        'input.$': '$.input',
+        'draftId.$': '$.draftId',
+        'stepRetries': 0,
+      },
     });
 
     const initGenerateFactsRetries = new sfn.Pass(this, 'InitGenerateFactsRetries', {
-      resultPath: '$.generateFactsRetries',
-      result: sfn.Result.fromNumber(0),
+      parameters: {
+        'input.$': '$.input',
+        'draftId.$': '$.draftId',
+        'stepRetries': 0,
+      },
     });
 
     const initGenerateCasebookRetries = new sfn.Pass(this, 'InitGenerateCasebookRetries', {
-      resultPath: '$.generateCasebookRetries',
-      result: sfn.Result.fromNumber(0),
+      parameters: {
+        'input.$': '$.input',
+        'draftId.$': '$.draftId',
+        'stepRetries': 0,
+      },
     });
 
     const checkEvents = new sfn.Choice(this, 'CheckEvents')
       .when(
-        sfn.Condition.booleanEquals('$.eventValidationResult.valid', true),
+        sfn.Condition.booleanEquals('$.validationResult.valid', true),
         computeEventKnowledge,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.generateEventsRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
         eventsValidationFailed,
       )
       .otherwise(incrementEventsRetries);
@@ -429,26 +477,19 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     const incrementCharsRetries = new sfn.Pass(this, 'IncrementCharsRetries', {
       parameters: {
         'input.$': '$.input',
-        'template.$': '$.template',
-        'events.$': '$.events',
-        'eventValidationResult.$': '$.eventValidationResult',
-        'generateEventsRetries.$': '$.generateEventsRetries',
-        'characters.$': '$.characters',
-        'characterValidationResult.$': '$.characterValidationResult',
-        'generateCharactersRetries': sfn.JsonPath.mathAdd(
-          sfn.JsonPath.numberAt('$.generateCharactersRetries'),
-          1,
-        ),
+        'draftId.$': '$.draftId',
+        'validationResult.$': '$.validationResult',
+        'stepRetries': sfn.JsonPath.mathAdd(sfn.JsonPath.numberAt('$.stepRetries'), 1),
       },
     });
 
     const checkCharacters = new sfn.Choice(this, 'CheckCharacters')
       .when(
-        sfn.Condition.booleanEquals('$.characterValidationResult.valid', true),
+        sfn.Condition.booleanEquals('$.validationResult.valid', true),
         initGenerateLocationsRetries,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.generateCharactersRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
         charactersValidationFailed,
       )
       .otherwise(incrementCharsRetries);
@@ -467,29 +508,19 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     const incrementLocsRetries = new sfn.Pass(this, 'IncrementLocsRetries', {
       parameters: {
         'input.$': '$.input',
-        'template.$': '$.template',
-        'events.$': '$.events',
-        'eventValidationResult.$': '$.eventValidationResult',
-        'generateEventsRetries.$': '$.generateEventsRetries',
-        'characters.$': '$.characters',
-        'characterValidationResult.$': '$.characterValidationResult',
-        'generateCharactersRetries.$': '$.generateCharactersRetries',
-        'locations.$': '$.locations',
-        'locationValidationResult.$': '$.locationValidationResult',
-        'generateLocationsRetries': sfn.JsonPath.mathAdd(
-          sfn.JsonPath.numberAt('$.generateLocationsRetries'),
-          1,
-        ),
+        'draftId.$': '$.draftId',
+        'validationResult.$': '$.validationResult',
+        'stepRetries': sfn.JsonPath.mathAdd(sfn.JsonPath.numberAt('$.stepRetries'), 1),
       },
     });
 
     const checkLocations = new sfn.Choice(this, 'CheckLocations')
       .when(
-        sfn.Condition.booleanEquals('$.locationValidationResult.valid', true),
+        sfn.Condition.booleanEquals('$.validationResult.valid', true),
         computeFacts,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.generateLocationsRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
         locationsValidationFailed,
       )
       .otherwise(incrementLocsRetries);
@@ -508,36 +539,19 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     const incrementFactsRetries = new sfn.Pass(this, 'IncrementFactsRetries', {
       parameters: {
         'input.$': '$.input',
-        'template.$': '$.template',
-        'events.$': '$.events',
-        'eventValidationResult.$': '$.eventValidationResult',
-        'generateEventsRetries.$': '$.generateEventsRetries',
-        'computedKnowledge.$': '$.computedKnowledge',
-        'characters.$': '$.characters',
-        'characterValidationResult.$': '$.characterValidationResult',
-        'generateCharactersRetries.$': '$.generateCharactersRetries',
-        'roleMapping.$': '$.roleMapping',
-        'locations.$': '$.locations',
-        'locationValidationResult.$': '$.locationValidationResult',
-        'generateLocationsRetries.$': '$.generateLocationsRetries',
-        'factSkeletons.$': '$.factSkeletons',
-        'factGraph.$': '$.factGraph',
-        'facts.$': '$.facts',
-        'factValidationResult.$': '$.factValidationResult',
-        'generateFactsRetries': sfn.JsonPath.mathAdd(
-          sfn.JsonPath.numberAt('$.generateFactsRetries'),
-          1,
-        ),
+        'draftId.$': '$.draftId',
+        'validationResult.$': '$.validationResult',
+        'stepRetries': sfn.JsonPath.mathAdd(sfn.JsonPath.numberAt('$.stepRetries'), 1),
       },
     });
 
     const checkFacts = new sfn.Choice(this, 'CheckFacts')
       .when(
-        sfn.Condition.booleanEquals('$.factValidationResult.valid', true),
+        sfn.Condition.booleanEquals('$.validationResult.valid', true),
         generateIntroduction,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.generateFactsRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
         factsValidationFailed,
       )
       .otherwise(incrementFactsRetries);
@@ -559,33 +573,22 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       error: 'CasebookInvalid',
     });
 
-    // Increment the retry counter via a Pass state
     const incrementCasebookRetries = new sfn.Pass(this, 'IncrementGenerateCasebookRetries', {
       parameters: {
         'input.$': '$.input',
-        'template.$': '$.template',
-        'events.$': '$.events',
-        'characters.$': '$.characters',
-        'locations.$': '$.locations',
-        'facts.$': '$.facts',
-        'introductionFactIds.$': '$.introductionFactIds',
-        'factGraph.$': '$.factGraph',
-        'computedKnowledge.$': '$.computedKnowledge',
-        'casebookValidationResult.$': '$.casebookValidationResult',
-        'generateCasebookRetries': sfn.JsonPath.mathAdd(
-          sfn.JsonPath.numberAt('$.generateCasebookRetries'),
-          1,
-        ),
+        'draftId.$': '$.draftId',
+        'validationResult.$': '$.validationResult',
+        'stepRetries': sfn.JsonPath.mathAdd(sfn.JsonPath.numberAt('$.stepRetries'), 1),
       },
     });
 
     const checkCasebookValidation = new sfn.Choice(this, 'CheckCasebookValidation')
       .when(
-        sfn.Condition.booleanEquals('$.casebookValidationResult.valid', true),
+        sfn.Condition.booleanEquals('$.validationResult.valid', true),
         generateProse,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.generateCasebookRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
         casebookValidationFailed,
       )
       .otherwise(incrementCasebookRetries);
@@ -607,41 +610,30 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     });
 
     const initGenerateQuestionsRetries = new sfn.Pass(this, 'InitGenerateQuestionsRetries', {
-      resultPath: '$.generateQuestionsRetries',
-      result: sfn.Result.fromNumber(0),
+      parameters: {
+        'input.$': '$.input',
+        'draftId.$': '$.draftId',
+        'validationResult.$': '$.validationResult',
+        'stepRetries': 0,
+      },
     });
 
     const incrementGenerateQuestionsRetries = new sfn.Pass(this, 'IncrementGenerateQuestionsRetries', {
       parameters: {
         'input.$': '$.input',
-        'template.$': '$.template',
-        'events.$': '$.events',
-        'characters.$': '$.characters',
-        'locations.$': '$.locations',
-        'facts.$': '$.facts',
-        'introductionFactIds.$': '$.introductionFactIds',
-        'casebook.$': '$.casebook',
-        'casebookValidationResult.$': '$.casebookValidationResult',
-        'generateCasebookRetries.$': '$.generateCasebookRetries',
-        'prose.$': '$.prose',
-        'introduction.$': '$.introduction',
-        'title.$': '$.title',
-        'questions.$': '$.questions',
-        'questionValidationResult.$': '$.questionValidationResult',
-        'generateQuestionsRetries': sfn.JsonPath.mathAdd(
-          sfn.JsonPath.numberAt('$.generateQuestionsRetries'),
-          1,
-        ),
+        'draftId.$': '$.draftId',
+        'validationResult.$': '$.validationResult',
+        'stepRetries': sfn.JsonPath.mathAdd(sfn.JsonPath.numberAt('$.stepRetries'), 1),
       },
     });
 
     const checkQuestions = new sfn.Choice(this, 'CheckQuestions')
       .when(
-        sfn.Condition.booleanEquals('$.questionValidationResult.valid', true),
+        sfn.Condition.booleanEquals('$.validationResult.valid', true),
         computeOptimalPath,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.generateQuestionsRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
         questionsValidationFailed,
       )
       .otherwise(incrementGenerateQuestionsRetries);
@@ -675,8 +667,22 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       .when(sfn.Condition.isPresent('$.startFromStep'), resumeFromStep)
       .otherwise(generateTemplate);
 
-    // Pipeline entry: RouteByResume → (GenerateTemplate or jump to startFromStep) → ... → StoreCase
-    const pipelineDefinition = routeByResume;
+    // Entry: new runs get draftId from execution; resume runs keep draftId from state
+    const injectDraftId = new sfn.Pass(this, 'InjectDraftId', {
+      parameters: {
+        'input.$': '$.input',
+        'draftId': sfn.JsonPath.stringAt('$$.Execution.Id'),
+        'startFromStep.$': '$.startFromStep',
+      },
+    });
+    injectDraftId.next(routeByResume);
+
+    const hasDraftId = new sfn.Choice(this, 'HasDraftId')
+      .when(sfn.Condition.isPresent('$.draftId'), routeByResume)
+      .otherwise(injectDraftId);
+
+    // Pipeline entry: HasDraftId → (inject or RouteByResume) → ... → StoreCase
+    const pipelineDefinition = hasDraftId;
     generateTemplate.next(initEventsRetries);
 
     // Continue after checkCasebookValidation (valid) → generateProse → InitQuestionsRetries → GenerateQuestions → ...

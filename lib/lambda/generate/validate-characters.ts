@@ -1,6 +1,6 @@
+import { getDraft } from '../shared/draft-db';
 import type {
-  CaseGenerationState,
-  ValidationResult,
+  OperationalState,
   CharacterDraft,
 } from '../shared/generation-state';
 
@@ -23,26 +23,22 @@ const VALID_KNOWLEDGE_STATUS = new Set<string>([
  * - Every key in event.involvement references a valid characterId
  * - Every character.knowledgeState value is a valid KnowledgeStatus
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { events, characters } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { draftId } = state;
+  const draft = await getDraft(draftId);
+  const { events, characters } = draft ?? {};
 
   const errors: string[] = [];
   const warnings: string[] = [];
 
   if (!events || Object.keys(events).length === 0) {
     errors.push('No events in state');
-    return {
-      ...state,
-      characterValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   if (!characters || Object.keys(characters).length === 0) {
     errors.push('No characters in state');
-    return {
-      ...state,
-      characterValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   const characterIds = new Set(Object.keys(characters));
@@ -75,10 +71,6 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
 
   return {
     ...state,
-    characterValidationResult: {
-      valid: errors.length === 0,
-      errors,
-      warnings,
-    },
+    validationResult: { valid: errors.length === 0, errors, warnings },
   };
 };

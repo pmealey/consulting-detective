@@ -2,6 +2,8 @@
 
 When the case generation Step Function fails (e.g. validation or an LLM error), you can retry from a specific step using **partial state**: the state from the failed run (optionally edited) plus a `startFromStep` field. The state machine will skip earlier steps and run from that step to the end.
 
+**Important:** The draft case data (template, events, characters, etc.) is stored in a DynamoDB draft table keyed by `draftId`. When you copy state from a failed run, **keep the `draftId`** — it identifies the draft to resume. New runs get `draftId` from the execution ID automatically.
+
 ## When to use this
 
 - A step failed after several retries and you’ve fixed data (e.g. in the template, events, or facts) and want to re-run from that step.
@@ -11,17 +13,17 @@ When the case generation Step Function fails (e.g. validation or an LLM error), 
 
 Use the **first step you want to run** in the segment you’re resuming. All steps after it will run as normal.
 
-| Step | You must have in state |
-|------|------------------------|
-| `generateEvents` | `input`, `template` |
+| Step | Draft must contain (state: `input`, `draftId`) |
+|------|--------------------------------------------------|
+| `generateEvents` | `template` |
 | `computeEventKnowledge` | `input`, `template`, `events`, and events must already be valid (or you’ll re-validate) |
-| `generateCharacters` | `input`, `template`, `events`, `computedKnowledge` |
-| `generateLocations` | … plus `characters`, `roleMapping` (and characters valid) |
-| `computeFacts` | … plus `locations` (and locations valid) |
+| `generateCharacters` | `template`, `events`, `computedKnowledge` |
+| `generateLocations` | … plus `characters`, `roleMapping` (characters valid) |
+| `computeFacts` | … plus `locations` (locations valid) |
 | `generateFacts` | … plus `factSkeletons`, `factGraph` |
-| `generateIntroduction` | … plus `facts` (and facts valid) |
+| `generateIntroduction` | … plus `facts` (facts valid) |
 | `generateCasebook` | … plus `introductionFactIds`, `introduction`, `title` |
-| `generateProse` | … plus `casebook` (and casebook valid) |
+| `generateProse` | … plus `casebook` (casebook valid) |
 | `generateQuestions` | … plus `prose`, `introduction`, `title` |
 
 You **cannot** resume from `generateTemplate`; omit `startFromStep` to run the full pipeline from the beginning.
@@ -34,7 +36,7 @@ You **cannot** resume from `generateTemplate`; omit `startFromStep` to run the f
 
 1. Open Step Functions → State machines → `ConsultingDetective-CaseGeneration`.
 2. Open the failed execution.
-3. Open the **last successful** step (or the step you want to re-run) and copy its **Output** (that’s the full `CaseGenerationState` at that point).
+3. Open the **last successful** step (or the step you want to re-run) and copy its **Output** (that’s the operational state: `input`, `draftId`, and any validation/retry fields).
 
 **Option B – AWS CLI**
 
@@ -51,13 +53,12 @@ Find the event for the last successful state (e.g. `LambdaFunctionSucceeded`), a
 
 ### 3. Add `startFromStep`
 
-Add a top-level field to the state JSON:
+Add a top-level field to the state JSON. Include `draftId` from the failed run so the pipeline loads the same draft:
 
 ```json
 {
   "input": { "caseDate": "2025-02-10", ... },
-  "template": { ... },
-  "events": { ... },
+  "draftId": "the-execution-id-from-the-failed-run",
   "startFromStep": "generateLocations"
 }
 ```

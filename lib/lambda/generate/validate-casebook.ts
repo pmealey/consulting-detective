@@ -1,7 +1,7 @@
+import { getDraft } from '../shared/draft-db';
 import type {
-  CaseGenerationState,
+  OperationalState,
   CasebookValidationResult,
-  CasebookEntryDraft,
 } from '../shared/generation-state';
 
 /**
@@ -30,8 +30,10 @@ import type {
  * If validation fails, the Step Function retries GenerateCasebook with
  * error context (up to 2 retries).
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { events, characters, locations, facts, casebook, introductionFactIds } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { draftId } = state;
+  const draft = await getDraft(draftId);
+  const { events, characters, locations, facts, casebook, introductionFactIds } = draft ?? {};
 
   if (!facts) throw new Error('ValidateCasebook requires facts');
   if (!casebook) throw new Error('ValidateCasebook requires casebook');
@@ -123,7 +125,7 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
       reachableFactIds: [],
       reachableEntryIds: [],
     };
-    return { ...state, casebookValidationResult: result };
+    return { ...state, validationResult: result };
   }
 
   // ── Bipartite BFS: facts ↔ entries ───────────────────────────────
@@ -193,8 +195,5 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     reachableEntryIds: [...reachableEntries],
   };
 
-  return {
-    ...state,
-    casebookValidationResult: result,
-  };
+  return { ...state, validationResult: result };
 };

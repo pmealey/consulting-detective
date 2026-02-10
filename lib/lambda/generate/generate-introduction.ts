@@ -1,7 +1,8 @@
 import { callModel } from '../shared/bedrock';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import {
   GenerateIntroductionOutputSchema,
-  type CaseGenerationState,
+  type OperationalState,
 } from '../shared/generation-state';
 
 /**
@@ -26,8 +27,10 @@ import {
  *
  * The template's mysteryStyle and narrativeTone guide the voice and structure.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template, events, characters, locations, facts, factGraph } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { input, draftId } = state;
+  const draft = await getDraft(draftId);
+  const { template, events, characters, locations, facts, factGraph } = draft ?? {};
 
   if (!template) throw new Error('GenerateIntroduction requires template from step 1');
   if (!events) throw new Error('GenerateIntroduction requires events from step 2');
@@ -145,12 +148,12 @@ Select 2-4 introduction facts, write the opening scene, and finalize the title. 
     },
   );
 
-  return {
-    ...state,
+  await updateDraft(draftId, {
     introductionFactIds: result.introductionFactIds,
     introduction: result.introduction,
     title: result.title,
-  };
+  });
+  return state;
 };
 
 // ============================================

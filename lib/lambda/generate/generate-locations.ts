@@ -1,7 +1,8 @@
 import { callModel } from '../shared/bedrock';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import {
   LocationsSchema,
-  type CaseGenerationState,
+  type OperationalState,
 } from '../shared/generation-state';
 
 /**
@@ -10,8 +11,10 @@ import {
  * Creates the spatial world model: buildings, rooms, streets, and outdoor areas
  * with containment hierarchy and perception edges (visibleFrom, audibleFrom).
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template, events, characters, computedKnowledge, roleMapping } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { input, draftId } = state;
+  const draft = await getDraft(draftId);
+  const { template, events, characters, computedKnowledge, roleMapping } = draft ?? {};
 
   if (!template) throw new Error('Step 4 requires template from step 1');
   if (!events) throw new Error('Step 4 requires events from step 2');
@@ -61,7 +64,7 @@ Guidelines:
 - A location's visibleFrom should include places with direct sight lines (across a street, through a window).
 - Location names and descriptions should evoke the era: ${template.era}.`;
 
-  const locationValidationResult = state.locationValidationResult;
+  const validationResult = state.validationResult;
   const userPrompt = `Here is the case context:
 
 Title: ${template.title}
@@ -83,14 +86,14 @@ ${computedKnowledge?.locationReveals && Object.keys(computedKnowledge.locationRe
 Physical evidence by location:\n${Object.entries(computedKnowledge.locationReveals).map(([locId, factIds]) => `  ${locId}: ${factIds.join(', ')}`).join('\n')}` : ''}
 
 Create the full location graph. Every event location placeholder must map to a concrete location. Add additional locations for atmosphere. Think through the spatial relationships first, then provide the JSON.${
-    locationValidationResult && !locationValidationResult.valid
+    validationResult && !validationResult.valid
       ? `
 
 ## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
 
 Your previous output failed validation. You MUST fix these errors:
 
-${locationValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
+${validationResult.errors.map((e) => `- ${e}`).join('\n')}`
       : ''
   }`;
 
@@ -104,8 +107,6 @@ ${locationValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
     (raw) => LocationsSchema.parse(raw),
   );
 
-  return {
-    ...state,
-    locations,
-  };
+  await updateDraft(draftId, { locations });
+  return state;
 };

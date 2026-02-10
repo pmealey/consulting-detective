@@ -1,5 +1,6 @@
+import { getDraft } from '../shared/draft-db';
 import type {
-  CaseGenerationState,
+  OperationalState,
   ValidationResult,
   EventDraft,
   EventRevealDraft,
@@ -27,18 +28,17 @@ const VALID_INVOLVEMENT_TYPES = new Set<string>([
  * Does not validate agent/location against characters/locations (those are
  * still role/location placeholders at this stage).
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { events } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { draftId } = state;
+  const draft = await getDraft(draftId);
+  const events = draft?.events;
 
   const errors: string[] = [];
   const warnings: string[] = [];
 
   if (!events || Object.keys(events).length === 0) {
     errors.push('No events in state');
-    return {
-      ...state,
-      eventValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   const eventIds = new Set(Object.keys(events));
@@ -76,25 +76,16 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   }
 
   if (errors.length > 0) {
-    return {
-      ...state,
-      eventValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   const dagValid = isCausalDagAcyclic(events, eventIds);
   if (!dagValid.acyclic) {
     errors.push(...dagValid.cycleErrors);
-    return {
-      ...state,
-      eventValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
-  return {
-    ...state,
-    eventValidationResult: { valid: true, errors: [], warnings },
-  };
+  return { ...state, validationResult: { valid: true, errors: [], warnings } };
 };
 
 /**

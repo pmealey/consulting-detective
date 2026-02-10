@@ -11,3 +11,4 @@ export const docClient = DynamoDBDocumentClient.from(client, {
 
 // Table names from environment variables
 export const CASES_TABLE = process.env.CASES_TABLE_NAME!;
+export const DRAFT_CASES_TABLE = process.env.DRAFT_CASES_TABLE_NAME!;

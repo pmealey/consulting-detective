@@ -1,7 +1,8 @@
 import { callModel } from '../shared/bedrock';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import {
   CasebookPolishSchema,
-  type CaseGenerationState,
+  type OperationalState,
   type CasebookEntryDraft,
   type CharacterDraft,
   type FactDraft,
@@ -30,11 +31,14 @@ import {
  * reachable, all entries gated, graph connectivity). The AI phase adds
  * narrative quality without breaking the structure.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { input, draftId } = state;
+  const draft = await getDraft(draftId);
   const {
-    input, template, events, characters, locations, facts,
-    introductionFactIds, factGraph, computedKnowledge, casebookValidationResult,
-  } = state;
+    template, events, characters, locations, facts,
+    introductionFactIds, factGraph, computedKnowledge,
+  } = draft ?? {};
+  const validationResult = state.validationResult;
 
   if (!template) throw new Error('Step 8 requires template from step 1');
   if (!events) throw new Error('Step 8 requires events from step 2');
@@ -119,14 +123,14 @@ ${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.my
 ${Object.values(locations).map((l) => `  - ${l.locationId} (${l.name}): ${l.type} — ${l.description}`).join('\n')}
 
 Provide the JSON with labels, addresses, and character assignments for each entry. Labels and addresses must match the mystery style above.${
-  casebookValidationResult && !casebookValidationResult.valid
+  validationResult && !validationResult.valid
     ? `
 
 ## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
 
 Your previous casebook polish failed validation. Fix these errors:
 
-${casebookValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
+${validationResult.errors.map((e) => `- ${e}`).join('\n')}`
     : ''
 }`;
 
@@ -143,10 +147,8 @@ ${casebookValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
   // ── Phase 3: Merge AI polish into programmatic skeleton ──────────
   const casebook = mergeCasebook(skeleton, polish);
 
-  return {
-    ...state,
-    casebook,
-  };
+  await updateDraft(draftId, { casebook });
+  return state;
 };
 
 // ════════════════════════════════════════════════════════════════════

@@ -1,4 +1,5 @@
-import type { CaseGenerationState, CasebookEntryDraft } from '../shared/generation-state';
+import { getDraft, updateDraft } from '../shared/draft-db';
+import type { OperationalState, CasebookEntryDraft } from '../shared/generation-state';
 
 /**
  * Pipeline Step 11: Compute Optimal Path
@@ -17,8 +18,10 @@ import type { CaseGenerationState, CasebookEntryDraft } from '../shared/generati
  *
  * This is pure computation — no LLM call needed.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { casebook, questions, facts, introductionFactIds } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { draftId, input } = state;
+  const draft = await getDraft(draftId);
+  const { casebook, questions, facts, introductionFactIds } = draft ?? {};
 
   if (!casebook) throw new Error('ComputeOptimalPath requires casebook from step 8');
   if (!questions) throw new Error('ComputeOptimalPath requires questions from step 10');
@@ -189,9 +192,9 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
     throw new Error(`Coherence check failed: ${errors.join('; ')}`);
   }
 
+  await updateDraft(draftId, { optimalPath });
   return {
     ...state,
-    optimalPath,
     validationResult: { valid: true, errors: [], warnings: [] },
   };
 };

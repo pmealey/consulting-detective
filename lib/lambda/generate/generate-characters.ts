@@ -1,7 +1,8 @@
 import { callModel } from '../shared/bedrock';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import {
   PopulateCharactersResultSchema,
-  type CaseGenerationState,
+  type OperationalState,
   type CharacterDraft,
   type ComputedKnowledge,
   type EventDraft,
@@ -23,8 +24,10 @@ import {
  * Also produces a roleId -> characterId mapping that is used to rewrite
  * all role IDs in the event chain with real character IDs.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template, events, computedKnowledge } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { input, draftId } = state;
+  const draft = await getDraft(draftId);
+  const { template, events, computedKnowledge } = draft ?? {};
 
   if (!template) throw new Error('Step 3 requires template from step 1');
   if (!events) throw new Error('Step 3 requires events from step 2');
@@ -90,7 +93,7 @@ Your job is to START from the baseline and MODIFY entries based on character per
 - Set currentStatus only when it affects whether or how the character can be met during the investigation. Omit for characters with no such constraint.
 - societalRole must be their job or station in society (Landlady, Servant, Business partner, Inspector). Never put mystery labels (Victim, Witness, Suspect) in societalRole — those go in "mysteryRole" only.`;
 
-  const characterValidationResult = state.characterValidationResult;
+  const validationResult = state.validationResult;
   const userPrompt = `Here is the case context:
 
 Crime Type: ${template.crimeType}
@@ -116,14 +119,14 @@ This is what each role would logically know based on their event involvement. Us
 ${baselineKnowledgeSection}
 
 Create the full character set with the roleMapping. Think through each character's personality, motivations, and what they might conceal or distort, then provide the JSON.${
-    characterValidationResult && !characterValidationResult.valid
+    validationResult && !validationResult.valid
       ? `
 
 ## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
 
 Your previous output failed validation. You MUST fix these errors:
 
-${characterValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
+${validationResult.errors.map((e) => `- ${e}`).join('\n')}`
       : ''
   }`;
 
@@ -162,12 +165,12 @@ ${characterValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
     };
   }
 
-  return {
-    ...state,
+  await updateDraft(draftId, {
     characters,
     roleMapping,
     events: remappedEvents,
-  };
+  });
+  return state;
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────

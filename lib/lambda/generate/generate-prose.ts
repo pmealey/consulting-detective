@@ -1,7 +1,8 @@
 import { callModel } from '../shared/bedrock';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import {
   SceneBatchSchema,
-  type CaseGenerationState,
+  type OperationalState,
   type CasebookEntryDraft,
   type CharacterDraft,
   type FactDraft,
@@ -21,8 +22,10 @@ import {
  * hides, denies, believes) and fact veracity so false facts are presented
  * as believed by characters who hold them.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template, events, characters, locations, facts, casebook, introduction, title } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { input, draftId } = state;
+  const draft = await getDraft(draftId);
+  const { template, events, characters, locations, facts, casebook, introduction, title } = draft ?? {};
 
   if (!template) throw new Error('GenerateProse requires template from step 1');
   if (!events) throw new Error('GenerateProse requires events from step 2');
@@ -104,10 +107,8 @@ Provide the JSON mapping entryId -> scene text.`;
     (raw) => SceneBatchSchema.parse(raw),
   );
 
-  return {
-    ...state,
-    prose: scenes,
-  };
+  await updateDraft(draftId, { prose: scenes });
+  return state;
 };
 
 // ============================================

@@ -1,6 +1,6 @@
+import { getDraft } from '../shared/draft-db';
 import type {
-  CaseGenerationState,
-  ValidationResult,
+  OperationalState,
   EventDraft,
   LocationDraft,
 } from '../shared/generation-state';
@@ -19,18 +19,17 @@ import type {
  *
  * On failure, the Step Function retries GenerateLocations.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { events, locations, roleMapping } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { draftId } = state;
+  const draft = await getDraft(draftId);
+  const { events, locations, roleMapping } = draft ?? {};
 
   const errors: string[] = [];
   const warnings: string[] = [];
 
   if (!locations || Object.keys(locations).length === 0) {
     errors.push('No locations in state');
-    return {
-      ...state,
-      locationValidationResult: { valid: false, errors, warnings },
-    };
+    return { ...state, validationResult: { valid: false, errors, warnings } };
   }
 
   const locationIds = new Set(Object.keys(locations));
@@ -84,8 +83,5 @@ export const handler = async (state: CaseGenerationState): Promise<CaseGeneratio
   }
 
   const valid = errors.length === 0;
-  return {
-    ...state,
-    locationValidationResult: { valid, errors, warnings },
-  };
+  return { ...state, validationResult: { valid, errors, warnings } };
 };

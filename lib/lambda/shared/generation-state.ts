@@ -59,95 +59,62 @@ export const GenerateCaseInputSchema = z.object({
 });
 
 // ============================================
-// Case Generation State (progressive accumulator)
+// Draft case (stored in DynamoDB draft table)
 //
-// Each pipeline step adds fields to this state object.
-// All fields are optional because the state is built up
-// incrementally — only fields written by completed steps exist.
+// Case content only — no input. Input (caseDate, modelConfig, etc.) lives
+// in OperationalState. Each step reads the draft, merges its output, and
+// writes the draft back. Keyed by draftId (execution ID).
 // ============================================
 
-export interface CaseGenerationState {
-  // -- Input (always present after trigger) --
-  input: GenerateCaseInput;
-
-  /**
-   * When starting an execution with partial state (retry/resume), set this to
-   * the first step to run. The state machine will jump to that step and continue.
-   * Omitted for normal runs.
-   */
-  startFromStep?: GenerationStep;
-
-  // -- Step 1: Generate Template --
+export interface DraftCase {
   template?: CaseTemplate;
-
-  // -- Step 2: Generate Events --
   events?: Record<string, EventDraft>;
-  /** Result of event validation (causes DAG, agent in involvement). */
-  eventValidationResult?: ValidationResult;
-  /** Number of times GenerateEvents has been retried after validation failure. */
-  generateEventsRetries?: number;
-
-  // -- Step 2b: Compute Event Knowledge --
   computedKnowledge?: ComputedKnowledge;
-
-  // -- Step 3: Generate Characters --
   characters?: Record<string, CharacterDraft>;
-  /** Mapping from template roleId to generated characterId. */
   roleMapping?: Record<string, string>;
-  /** Result of character/event cross-reference validation after GenerateCharacters. */
-  characterValidationResult?: ValidationResult;
-  /** Number of times GenerateCharacters has been retried after validation failure. */
-  generateCharactersRetries?: number;
-
-  // -- Step 4: Generate Locations --
   locations?: Record<string, LocationDraft>;
-  /** Result of location validation (event locations, accessibleFrom graph). */
-  locationValidationResult?: ValidationResult;
-  /** Number of times GenerateLocations has been retried after validation failure. */
-  generateLocationsRetries?: number;
-
-  // -- Step 5: Compute Facts --
   factSkeletons?: FactSkeleton[];
   factGraph?: FactGraph;
-
-  // -- Step 6: Generate Facts --
   facts?: Record<string, FactDraft>;
-
-  // -- Step 6b: Validate Facts --
-  factValidationResult?: ValidationResult;
-  /** Number of times GenerateFacts has been retried after validation failure. */
-  generateFactsRetries?: number;
-
-  // -- Step 7: Generate Introduction --
   introductionFactIds?: string[];
   introduction?: string;
   title?: string;
-
-  // -- Step 8: Generate Casebook --
   casebook?: Record<string, CasebookEntryDraft>;
-
-  // -- Step 8b: Validate Casebook --
-  /** Result of casebook validation (reachability from introduction facts; reachableFactIds used by ValidateQuestions). */
-  casebookValidationResult?: CasebookValidationResult;
-  /** Number of times GenerateCasebook has been retried after casebook validation failure */
-  generateCasebookRetries?: number;
-
-  // -- Step 9: Generate Prose (scenes only) --
   prose?: Record<string, string>;
-
-  // -- Step 10: Generate Questions --
   questions?: QuestionDraft[];
-  /** Result of question validation (answer.acceptedIds exist, reachable, type valid). */
-  questionValidationResult?: ValidationResult;
-  /** Number of times GenerateQuestions has been retried after validation failure. */
-  generateQuestionsRetries?: number;
-
-  // -- Step 11: Compute Optimal Path --
   optimalPath?: string[];
-
-  // -- Step 12: Store Case (validation absorbed into ComputeOptimalPath) --
-  validationResult?: ValidationResult;
 }
+
+// ============================================
+// Operational state (Step Function state)
+//
+// Only input, draftId, resume hint, validation results, and retry counts.
+// Draft content lives in the draft table; steps load/save it by draftId.
+// ============================================
+
+/** Single validation slot: overwritten by each validation step. Casebook step writes CasebookValidationResult; others write ValidationResult. */
+export type StepValidationResult = ValidationResult | CasebookValidationResult;
+
+export interface OperationalState {
+  input: GenerateCaseInput;
+  /** Execution ID — keys the draft in the draft table. Injected at start or from resumed state. */
+  draftId: string;
+  startFromStep?: GenerationStep;
+  /** Last validation result (set by each Validate* step, cleared when starting a new step's retry loop). */
+  validationResult?: StepValidationResult;
+  /** Retry count for the current step's loop; set to 0 when entering a step, incremented on retry. */
+  stepRetries?: number;
+}
+
+// ============================================
+// Case Generation State (legacy / combined)
+//
+// Full state = operational + draft. Used when a Lambda needs to work with
+// both (e.g. loading draft and returning operational). Steps receive
+// OperationalState and read draft from DB; they return OperationalState.
+// ============================================
+
+export type CaseGenerationState = OperationalState & Partial<DraftCase>;
 
 // ============================================
 // Draft Types

@@ -1,9 +1,11 @@
 import { callModel } from '../shared/bedrock';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import {
   GenerateFactsOutputSchema,
-  type CaseGenerationState,
+  type DraftCase,
   type FactDraft,
   type FactSkeleton,
+  type OperationalState,
 } from '../shared/generation-state';
 
 /**
@@ -19,8 +21,11 @@ import {
  * is the same one assigned in ComputeFacts — events, characters,
  * computedKnowledge, and factGraph all reference facts by this ID.
  */
-export const handler = async (state: CaseGenerationState): Promise<CaseGenerationState> => {
-  const { input, template, events, characters, locations, factSkeletons, factValidationResult } = state;
+export const handler = async (state: OperationalState): Promise<OperationalState> => {
+  const { input, draftId } = state;
+  const draft = await getDraft(draftId);
+  const { template, events, characters, locations, factSkeletons } = draft ?? {};
+  const validationResult = state.validationResult;
 
   if (!template) throw new Error('GenerateFacts requires template from step 1');
   if (!events) throw new Error('GenerateFacts requires events from step 2');
@@ -67,7 +72,7 @@ Your response must end with valid JSON: a Record<factId, { description, category
 - Think about how facts form a coherent mystery narrative. Facts from the same event should tell a consistent story.`;
 
   const skeletonDescriptions = factSkeletons.map((s) =>
-    formatSkeletonForPrompt(s, state),
+    formatSkeletonForPrompt(s, draft!),
   );
 
   const userPrompt = `Here is the case context:
@@ -94,14 +99,14 @@ ${skeletonDescriptions.join('\n\n')}
 First, briefly reason through the narrative: what story do these facts tell together? How do the false facts create confusion? How do the bridge facts connect different threads? Then provide the JSON.
 
 Your JSON must be a Record<factId, { description, category }> with exactly ${factSkeletons.length} entries — one for each fact listed above.${
-    factValidationResult && !factValidationResult.valid
+    validationResult && !validationResult.valid
       ? `
 
 ## IMPORTANT — PREVIOUS ATTEMPT FAILED VALIDATION
 
 Your previous output failed validation. You MUST fix these errors:
 
-${factValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
+${validationResult.errors.map((e) => `- ${e}`).join('\n')}`
       : ''
   }`;
 
@@ -136,10 +141,8 @@ ${factValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
     };
   }
 
-  return {
-    ...state,
-    facts,
-  };
+  await updateDraft(draftId, { facts });
+  return state;
 };
 
 // ============================================
@@ -152,9 +155,9 @@ ${factValidationResult.errors.map((e) => `- ${e}`).join('\n')}`
  */
 function formatSkeletonForPrompt(
   skeleton: FactSkeleton,
-  state: CaseGenerationState,
+  draft: DraftCase,
 ): string {
-  const { events, characters, locations } = state;
+  const { events, characters, locations } = draft;
   const subjectNames = skeleton.subjects.map((id) => {
     if (characters?.[id]) return `${id} (${characters[id].name})`;
     if (locations?.[id]) return `${id} (${locations[id].name})`;
