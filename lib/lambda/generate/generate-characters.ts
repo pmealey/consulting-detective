@@ -58,7 +58,7 @@ Each Character must match:
   "societalRole": string,          // occupation/station ONLY — e.g. "Landlady", "Business partner". This is shown to players. NEVER use Victim, Witness, Suspect here.
   "description": string,           // physical/personality sketch (2-3 sentences)
   "motivations": string[],         // desires, fears, secrets, grudges, loyalties (2-5 items)
-  "knowledgeState": Record<string, string>,  // factId -> "knows" | "suspects" | "hides" | "denies" | "believes"
+  "knowledgeState": Record<string, string>,  // factId -> "knows" | "suspects" | "hides" | "denies" (only baseline factIds — do NOT invent new ones)
   "tone": {
     "register": string,            // e.g. "formal", "nervous", "brusque", etc.
     "vocabulary": string[],        // 3-5 characteristic words/phrases
@@ -78,8 +78,7 @@ Your job is to START from the baseline and MODIFY entries based on character per
 - You may KEEP an entry as "knows" (willing to share openly)
 - You may DOWNGRADE an entry to "suspects" (partial awareness, will only hint)
 - You may DOWNGRADE an entry to "hides" (aware but refuses to share — protecting themselves or someone else)
-- You may DOWNGRADE an entry to "denies" (aware but actively claims the opposite — the corresponding false fact will be created programmatically later)
-- You may ADD new "believes" entries for false beliefs the character holds (things they genuinely think are true but aren't)
+- You may DOWNGRADE an entry to "denies" (aware but actively claims the opposite — a corresponding false counter-fact will be created programmatically later, and the character will automatically "believe" it)
 - You must NOT add new "knows" entries that aren't in the baseline — if a character wasn't involved in an event, they can't know what it revealed
 - Every fact from the baseline MUST appear in the character's knowledgeState (don't drop any)
 
@@ -114,7 +113,7 @@ ${Object.values(events).map((e) => `  ${e.eventId} reveals: [${e.reveals.map((r)
 
 ## Pre-Computed Baseline Knowledge
 
-This is what each role would logically know based on their event involvement. Use this as your starting point for each character's knowledgeState. You may modify statuses (knows -> suspects/hides/denies) or add "believes" entries, but do NOT add new "knows" entries.
+This is what each role would logically know based on their event involvement. Use this as your starting point for each character's knowledgeState. You may modify statuses (knows -> suspects/hides/denies), but do NOT add new "knows" entries or invent new factIds. Use "denies" to create contradictions — false counter-facts are generated automatically.
 
 ${baselineKnowledgeSection}
 
@@ -243,11 +242,16 @@ function enforceBaselineKnowledge(
       // Otherwise: AI set a valid status (knows/suspects/hides/denies) — keep it
     }
 
-    // 2. Strip 'knows' entries that aren't in the baseline
-    //    (AI shouldn't invent new knowledge, but 'believes' entries for
-    //    false beliefs are allowed since they aren't 'knows')
-    for (const [factId, status] of Object.entries(character.knowledgeState)) {
-      if (status === 'knows' && !baselineFactIds.has(factId)) {
+    // 2. Strip entries that reference factIds not in the baseline.
+    //    - 'knows' with invented factIds: AI shouldn't invent new knowledge.
+    //    - 'believes' with invented factIds: freestanding false beliefs have
+    //      no corresponding true fact for the player to discover, making them
+    //      undetectable. False beliefs are handled via 'denies' — each denial
+    //      auto-generates a paired false fact the character believes.
+    //    - 'suspects'/'hides'/'denies' with invented factIds: same logic —
+    //      these must reference real event-reveal facts.
+    for (const [factId] of Object.entries(character.knowledgeState)) {
+      if (!baselineFactIds.has(factId)) {
         delete character.knowledgeState[factId];
       }
     }
