@@ -1,4 +1,4 @@
-import { getDraft } from '../shared/draft-db';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import type {
   OperationalState,
   CasebookValidationResult,
@@ -125,6 +125,7 @@ export const handler = async (state: OperationalState): Promise<OperationalState
       reachableFactIds: [],
       reachableEntryIds: [],
     };
+    await updateDraft(draftId, { lastValidationResult: result });
     return { ...state, validationResult: result };
   }
 
@@ -194,6 +195,8 @@ export const handler = async (state: OperationalState): Promise<OperationalState
     reachableFactIds: [...reachableFacts],
     reachableEntryIds: [...reachableEntries],
   };
-
+  if (!result.valid) {
+    await updateDraft(draftId, { lastValidationResult: result });
+  }
   return { ...state, validationResult: result };
 };

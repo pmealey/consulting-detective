@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-do
 import { basename } from './config/base-path.ts'
 import { Home } from './pages/Home.tsx'
 import { CasePage } from './pages/CasePage.tsx'
+import { GenerationPage } from './pages/GenerationPage.tsx'
 
 function AppLayout() {
   const location = useLocation()
@@ -25,6 +26,7 @@ function AppLayout() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/case/:caseDate" element={<CasePage />} />
+          <Route path="/generation" element={<GenerationPage />} />
         </Routes>
       </main>
     </div>

@@ -13,6 +13,10 @@ import {
  */
 export const handler = async (state: OperationalState): Promise<OperationalState> => {
   const { input, draftId } = state;
+  await updateDraft(draftId, {
+    currentStep: 'generateEvents',
+    lastStepStartedAt: new Date().toISOString(),
+  });
   const draft = await getDraft(draftId);
   const template = draft?.template;
   if (!template) throw new Error('Step 2 requires template from step 1');

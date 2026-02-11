@@ -34,6 +34,10 @@ import type {
  */
 export const handler = async (state: OperationalState): Promise<OperationalState> => {
   const { draftId, input } = state;
+  await updateDraft(draftId, {
+    currentStep: 'computeEventKnowledge',
+    lastStepStartedAt: new Date().toISOString(),
+  });
   const draft = await getDraft(draftId);
   const events = draft?.events;
 

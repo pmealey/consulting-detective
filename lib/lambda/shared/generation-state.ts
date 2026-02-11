@@ -18,7 +18,16 @@ export const GENERATION_STEPS = [
   'generateQuestions',
 ] as const;
 
-export type GenerationStep = typeof GENERATION_STEPS[number];
+export type GenerationStep = (typeof GENERATION_STEPS)[number];
+
+/** Full pipeline order for UI progress graph (GENERATION_STEPS + computeOptimalPath, storeCase). */
+export const PIPELINE_STEPS = [
+  ...GENERATION_STEPS,
+  'computeOptimalPath',
+  'storeCase',
+] as const;
+
+export type PipelineStep = (typeof PIPELINE_STEPS)[number];
 
 // ============================================
 // Model Configuration
@@ -83,6 +92,12 @@ export interface DraftCase {
   prose?: Record<string, string>;
   questions?: QuestionDraft[];
   optimalPath?: string[];
+  /** Tracking: major step currently running (or last run). Updated by each pipeline Lambda at start. */
+  currentStep?: PipelineStep;
+  /** Tracking: full validation result when validation fails. Cleared by StoreCase on success. */
+  lastValidationResult?: StepValidationResult;
+  /** Tracking: ISO timestamp when currentStep was last set. */
+  lastStepStartedAt?: string;
 }
 
 // ============================================

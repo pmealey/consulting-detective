@@ -1,4 +1,4 @@
-import { getDraft } from '../shared/draft-db';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import type {
   OperationalState,
   ValidationResult,
@@ -33,24 +33,29 @@ export const handler = async (state: OperationalState): Promise<OperationalState
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  const fail = async (result: ValidationResult) => {
+    await updateDraft(draftId, { lastValidationResult: result });
+    return { ...state, validationResult: result };
+  };
+
   if (!facts || Object.keys(facts).length === 0) {
     errors.push('No facts in state — GenerateFacts produced no output');
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    return fail({ valid: false, errors, warnings });
   }
 
   if (!factSkeletons || factSkeletons.length === 0) {
     errors.push('No factSkeletons in state — ComputeFacts must run first');
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    return fail({ valid: false, errors, warnings });
   }
 
   if (!characters) {
     errors.push('No characters in state');
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    return fail({ valid: false, errors, warnings });
   }
 
   if (!locations) {
     errors.push('No locations in state');
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    return fail({ valid: false, errors, warnings });
   }
 
   const allCharacterIds = new Set(Object.keys(characters));
@@ -148,6 +153,8 @@ export const handler = async (state: OperationalState): Promise<OperationalState
     errors,
     warnings,
   };
-
+  if (!result.valid) {
+    await updateDraft(draftId, { lastValidationResult: result });
+  }
   return { ...state, validationResult: result };
 };

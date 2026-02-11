@@ -693,6 +693,25 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       definitionBody: sfn.DefinitionBody.fromChainable(pipelineDefinition)
     });
 
+    // Generation tracking API (list/describe executions for UI)
+    const generationTrackingEnvironment = {
+      ...generationEnvironment,
+      STATE_MACHINE_ARN: generationStateMachine.stateMachineArn,
+    };
+    const listExecutionsHandler = new nodejs.NodejsFunction(this, 'ListExecutionsHandler', {
+      entry: join(__dirname, 'lambda/generation/list-executions.ts'),
+      environment: generationTrackingEnvironment,
+      ...bundlingConfig,
+    });
+    const executionDetailHandler = new nodejs.NodejsFunction(this, 'ExecutionDetailHandler', {
+      entry: join(__dirname, 'lambda/generation/execution-detail.ts'),
+      environment: generationTrackingEnvironment,
+      ...bundlingConfig,
+    });
+    generationStateMachine.grantRead(listExecutionsHandler);
+    generationStateMachine.grantRead(executionDetailHandler);
+    draftCasesTable.grantReadData(executionDetailHandler);
+
     // ============================================
     // Grant DynamoDB Permissions
     // ============================================
@@ -725,6 +744,13 @@ export class ConsultingDetectiveStack extends cdk.Stack {
 
     const singleCase = cases.addResource('{caseDate}');
     singleCase.addMethod('GET', new apigateway.LambdaIntegration(getCaseHandler));
+
+    // Generation tracking routes
+    const generation = api.root.addResource('generation');
+    const executions = generation.addResource('executions');
+    executions.addMethod('GET', new apigateway.LambdaIntegration(listExecutionsHandler));
+    const executionId = executions.addResource('{executionId}');
+    executionId.addMethod('GET', new apigateway.LambdaIntegration(executionDetailHandler));
 
     // ============================================
     // S3 Bucket for Frontend Hosting

@@ -1,4 +1,4 @@
-import { getDraft } from '../shared/draft-db';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import type {
   OperationalState,
   ValidationResult,
@@ -123,8 +123,13 @@ export const handler = async (state: OperationalState): Promise<OperationalState
     }
   }
 
-  const valid = errors.length === 0;
-  const questionValidationResult: ValidationResult = { valid, errors, warnings };
-
+  const questionValidationResult: ValidationResult = {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+  if (!questionValidationResult.valid) {
+    await updateDraft(draftId, { lastValidationResult: questionValidationResult });
+  }
   return { ...state, validationResult: questionValidationResult };
 };

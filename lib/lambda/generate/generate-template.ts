@@ -64,6 +64,10 @@ const SETTING_FLAVORS = [
  */
 export const handler = async (state: OperationalState): Promise<OperationalState> => {
   const { input, draftId } = state;
+  await updateDraft(draftId, {
+    currentStep: 'generateTemplate',
+    lastStepStartedAt: new Date().toISOString(),
+  });
   const difficulty = input.difficulty ?? 'medium';
 
   // Pick a random setting flavor to suggest variety

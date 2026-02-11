@@ -1,8 +1,9 @@
-import { getDraft } from '../shared/draft-db';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import type {
   OperationalState,
   EventDraft,
   LocationDraft,
+  ValidationResult,
 } from '../shared/generation-state';
 
 /**
@@ -29,7 +30,9 @@ export const handler = async (state: OperationalState): Promise<OperationalState
 
   if (!locations || Object.keys(locations).length === 0) {
     errors.push('No locations in state');
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    const result: ValidationResult = { valid: false, errors, warnings };
+    await updateDraft(draftId, { lastValidationResult: result });
+    return { ...state, validationResult: result };
   }
 
   const locationIds = new Set(Object.keys(locations));
@@ -82,6 +85,9 @@ export const handler = async (state: OperationalState): Promise<OperationalState
     }
   }
 
-  const valid = errors.length === 0;
-  return { ...state, validationResult: { valid, errors, warnings } };
+  const result: ValidationResult = { valid: errors.length === 0, errors, warnings };
+  if (!result.valid) {
+    await updateDraft(draftId, { lastValidationResult: result });
+  }
+  return { ...state, validationResult: result };
 };

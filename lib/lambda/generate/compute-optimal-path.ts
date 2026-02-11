@@ -20,6 +20,10 @@ import type { OperationalState, CasebookEntryDraft } from '../shared/generation-
  */
 export const handler = async (state: OperationalState): Promise<OperationalState> => {
   const { draftId, input } = state;
+  await updateDraft(draftId, {
+    currentStep: 'computeOptimalPath',
+    lastStepStartedAt: new Date().toISOString(),
+  });
   const draft = await getDraft(draftId);
   const { casebook, questions, facts, introductionFactIds } = draft ?? {};
 

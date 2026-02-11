@@ -1,7 +1,8 @@
-import { getDraft } from '../shared/draft-db';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import type {
   OperationalState,
   CharacterDraft,
+  ValidationResult,
 } from '../shared/generation-state';
 
 /** Allowed knowledge state values (knows, suspects, hides, denies, believes). */
@@ -33,12 +34,16 @@ export const handler = async (state: OperationalState): Promise<OperationalState
 
   if (!events || Object.keys(events).length === 0) {
     errors.push('No events in state');
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    const result: ValidationResult = { valid: false, errors, warnings };
+    await updateDraft(draftId, { lastValidationResult: result });
+    return { ...state, validationResult: result };
   }
 
   if (!characters || Object.keys(characters).length === 0) {
     errors.push('No characters in state');
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    const result: ValidationResult = { valid: false, errors, warnings };
+    await updateDraft(draftId, { lastValidationResult: result });
+    return { ...state, validationResult: result };
   }
 
   const characterIds = new Set(Object.keys(characters));
@@ -69,8 +74,9 @@ export const handler = async (state: OperationalState): Promise<OperationalState
     }
   }
 
-  return {
-    ...state,
-    validationResult: { valid: errors.length === 0, errors, warnings },
-  };
+  const result: ValidationResult = { valid: errors.length === 0, errors, warnings };
+  if (!result.valid) {
+    await updateDraft(draftId, { lastValidationResult: result });
+  }
+  return { ...state, validationResult: result };
 };

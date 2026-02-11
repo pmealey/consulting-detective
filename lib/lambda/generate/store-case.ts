@@ -1,6 +1,6 @@
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, CASES_TABLE } from '../shared/db';
-import { getDraft } from '../shared/draft-db';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import type { OperationalState } from '../shared/generation-state';
 import type { Case } from '../../types/case';
 import type { CausalEvent, EventReveal, InvolvementType, EventNecessity } from '../../types/event';
@@ -28,6 +28,11 @@ export const handler = async (state: OperationalState): Promise<OperationalState
       `Errors: ${validationResult?.errors.join('; ')}`,
     );
   }
+
+  await updateDraft(draftId, {
+    currentStep: 'storeCase',
+    lastStepStartedAt: new Date().toISOString(),
+  });
 
   const draft = await getDraft(draftId);
   if (!draft) throw new Error('Cannot store case: draft not found');
@@ -151,6 +156,8 @@ export const handler = async (state: OperationalState): Promise<OperationalState
       Item: finalCase,
     }),
   );
+
+  await updateDraft(draftId, { lastValidationResult: undefined });
 
   return state;
 };

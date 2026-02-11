@@ -1,4 +1,4 @@
-import { getDraft } from '../shared/draft-db';
+import { getDraft, updateDraft } from '../shared/draft-db';
 import type {
   OperationalState,
   ValidationResult,
@@ -38,7 +38,9 @@ export const handler = async (state: OperationalState): Promise<OperationalState
 
   if (!events || Object.keys(events).length === 0) {
     errors.push('No events in state');
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    const result: ValidationResult = { valid: false, errors, warnings };
+    await updateDraft(draftId, { lastValidationResult: result });
+    return { ...state, validationResult: result };
   }
 
   const eventIds = new Set(Object.keys(events));
@@ -76,13 +78,17 @@ export const handler = async (state: OperationalState): Promise<OperationalState
   }
 
   if (errors.length > 0) {
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    const result: ValidationResult = { valid: false, errors, warnings };
+    await updateDraft(draftId, { lastValidationResult: result });
+    return { ...state, validationResult: result };
   }
 
   const dagValid = isCausalDagAcyclic(events, eventIds);
   if (!dagValid.acyclic) {
     errors.push(...dagValid.cycleErrors);
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    const result: ValidationResult = { valid: false, errors, warnings };
+    await updateDraft(draftId, { lastValidationResult: result });
+    return { ...state, validationResult: result };
   }
 
   return { ...state, validationResult: { valid: true, errors: [], warnings } };

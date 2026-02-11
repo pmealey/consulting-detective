@@ -33,6 +33,10 @@ import {
  */
 export const handler = async (state: OperationalState): Promise<OperationalState> => {
   const { input, draftId } = state;
+  await updateDraft(draftId, {
+    currentStep: 'generateCasebook',
+    lastStepStartedAt: new Date().toISOString(),
+  });
   const draft = await getDraft(draftId);
   const {
     template, events, characters, locations, facts,
