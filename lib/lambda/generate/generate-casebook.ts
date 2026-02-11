@@ -177,7 +177,6 @@ export function buildCasebookSkeleton(
 ): Record<string, CasebookEntryDraft> {
   const entries: Record<string, CasebookEntryDraft> = {};
   const allFactIds = new Set(Object.keys(facts));
-  const introFactIdSet = new Set(introductionFactIds);
 
   // ── Character entries ──────────────────────────────────────────
   for (const character of Object.values(characters)) {
@@ -193,21 +192,19 @@ export function buildCasebookSkeleton(
       }
     }
 
-    // Gates: facts that have this character as a subject (excluding intro facts,
-    // since intro facts are already known — we want facts that LEAD TO this entry)
+    // Gates: ALL facts that have this character as a subject.
+    // requiresAnyFact is an OR-gate — the entry unlocks when the player
+    // discovers ANY one of these facts. Including introduction facts is
+    // essential: if the intro mentions this character, the player can visit
+    // the entry immediately. Non-intro facts about this character provide
+    // alternative unlock paths discovered later via other entries.
     const factsAboutSubject = findFactsAboutSubject(charId, facts);
-    const gateFactIds = factsAboutSubject.filter((fid) => !introFactIdSet.has(fid));
 
-    // If no non-intro facts gate this entry, use intro facts about this subject
-    // (the entry is accessible from the start if the intro mentions this character)
-    const requiresAnyFact = gateFactIds.length > 0
-      ? gateFactIds
-      : factsAboutSubject.filter((fid) => introFactIdSet.has(fid));
-
-    // If still no gates, use any fact from the intro (fallback — shouldn't
-    // happen if ComputeFacts ensured connectivity, but be safe)
-    const finalGates = requiresAnyFact.length > 0
-      ? requiresAnyFact
+    // Fallback: if no facts mention this subject at all, use any intro fact
+    // so the entry isn't permanently locked. (Shouldn't happen if ComputeFacts
+    // ensured connectivity, but be safe.)
+    const finalGates = factsAboutSubject.length > 0
+      ? factsAboutSubject
       : [...introductionFactIds].slice(0, 1);
 
     // Location: pick the first location this character is associated with
@@ -242,15 +239,12 @@ export function buildCasebookSkeleton(
     // Skip location entries that reveal nothing — they'd be dead ends
     if (revealsFactIds.length === 0) continue;
 
-    // Gates: facts that have this location as a subject
+    // Gates: ALL facts that have this location as a subject (same OR-gate
+    // logic as character entries — see comment above).
     const factsAboutSubject = findFactsAboutSubject(locId, facts);
-    const gateFactIds = factsAboutSubject.filter((fid) => !introFactIdSet.has(fid));
-    const requiresAnyFact = gateFactIds.length > 0
-      ? gateFactIds
-      : factsAboutSubject.filter((fid) => introFactIdSet.has(fid));
 
-    const finalGates = requiresAnyFact.length > 0
-      ? requiresAnyFact
+    const finalGates = factsAboutSubject.length > 0
+      ? factsAboutSubject
       : [...introductionFactIds].slice(0, 1);
 
     entries[entryId] = {
