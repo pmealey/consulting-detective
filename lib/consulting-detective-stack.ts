@@ -697,8 +697,8 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       ...generationEnvironment,
       STATE_MACHINE_ARN: generationStateMachine.stateMachineArn,
     };
-    const listExecutionsHandler = new nodejs.NodejsFunction(this, 'ListExecutionsHandler', {
-      entry: join(__dirname, 'lambda/generation/list-executions.ts'),
+    const listDraftsHandler = new nodejs.NodejsFunction(this, 'ListDraftsHandler', {
+      entry: join(__dirname, 'lambda/generation/list-drafts.ts'),
       environment: generationTrackingEnvironment,
       ...bundlingConfig,
     });
@@ -707,7 +707,8 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       environment: generationTrackingEnvironment,
       ...bundlingConfig,
     });
-    generationStateMachine.grantRead(listExecutionsHandler);
+    draftCasesTable.grantReadData(listDraftsHandler);
+    generationStateMachine.grantRead(listDraftsHandler);
     generationStateMachine.grantRead(executionDetailHandler);
     draftCasesTable.grantReadData(executionDetailHandler);
 
@@ -744,10 +745,11 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     const singleCase = cases.addResource('{caseDate}');
     singleCase.addMethod('GET', new apigateway.LambdaIntegration(getCaseHandler));
 
-    // Generation tracking routes
+    // Generation tracking routes (draft-driven)
     const generation = api.root.addResource('generation');
+    const drafts = generation.addResource('drafts');
+    drafts.addMethod('GET', new apigateway.LambdaIntegration(listDraftsHandler));
     const executions = generation.addResource('executions');
-    executions.addMethod('GET', new apigateway.LambdaIntegration(listExecutionsHandler));
     const executionId = executions.addResource('{executionId}');
     executionId.addMethod('GET', new apigateway.LambdaIntegration(executionDetailHandler));
 

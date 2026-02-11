@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { SFNClient, DescribeExecutionCommand } from '@aws-sdk/client-sfn';
 import { getDraft } from '../shared/draft-db';
+import { latestExecutionByDraftId } from './list-drafts';
 import { successResponse, errorResponse, ErrorCodes } from '../shared/response';
 import type {
   GenerateCaseInput,
@@ -10,17 +10,7 @@ import type {
   StepValidationResult,
 } from '../shared/generation-state';
 
-const sfn = new SFNClient({});
-
 const STATE_MACHINE_ARN = process.env.STATE_MACHINE_ARN!;
-
-function executionArn(stateMachineArn: string, executionId: string): string {
-  const parts = stateMachineArn.split(':');
-  if (parts[5] === 'stateMachine' && parts[6]) {
-    return `${parts.slice(0, 5).join(':')}:execution:${parts[6]}:${executionId}`;
-  }
-  return stateMachineArn.replace(/:stateMachine:[^:]+$/, `:execution:${executionId}`);
-}
 
 export interface CaseSummary {
   title?: string;
@@ -72,14 +62,15 @@ function buildCaseSummary(input: GenerateCaseInput | undefined, draft: DraftCase
 
 /**
  * GET /generation/executions/:executionId — Execution detail plus draft-derived case summary and current step.
+ * Path param is the draftId. Status/errors come from the latest execution for that draft (first run or retry).
  */
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   try {
-    const executionId = event.pathParameters?.executionId;
-    if (!executionId) {
+    const draftId = event.pathParameters?.executionId;
+    if (!draftId) {
       return errorResponse(
         ErrorCodes.VALIDATION_ERROR.code,
-        'executionId path parameter is required',
+        'executionId (draftId) path parameter is required',
         ErrorCodes.VALIDATION_ERROR.status,
       );
     }
@@ -91,42 +82,29 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       );
     }
 
-    const arn = executionArn(STATE_MACHINE_ARN, executionId);
-    const execResult = await sfn.send(
-      new DescribeExecutionCommand({ executionArn: arn }),
-    );
+    const [draft, latestByDraft] = await Promise.all([
+      getDraft(draftId),
+      latestExecutionByDraftId(STATE_MACHINE_ARN, 100),
+    ]);
 
-    if (!execResult.executionArn) {
-      return errorResponse(
-        ErrorCodes.NOT_FOUND.code,
-        `Execution ${executionId} not found`,
-        ErrorCodes.NOT_FOUND.status,
-      );
-    }
-
-    let inputParsed: GenerateCaseInput | undefined;
-    if (execResult.input) {
-      try {
-        const parsed = JSON.parse(execResult.input) as { input?: GenerateCaseInput };
-        inputParsed = parsed.input;
-      } catch {
-        // ignore
-      }
-    }
-
-    const draftId = executionId;
-    const draft = await getDraft(draftId);
+    const exec = latestByDraft.get(draftId);
+    const status = exec?.status ?? 'UNKNOWN';
+    const startDate = exec?.startDate ?? draft?.lastStepStartedAt ?? '';
+    const stopDate = exec?.stopDate;
+    const error = exec?.error;
+    const cause = exec?.cause;
+    const inputParsed = exec?.input?.input;
 
     const caseSummary = buildCaseSummary(inputParsed, draft);
 
     const response: ExecutionDetailResponse = {
-      executionId,
-      status: execResult.status ?? 'UNKNOWN',
-      startDate: execResult.startDate ? new Date(execResult.startDate).toISOString() : '',
-      stopDate: execResult.stopDate ? new Date(execResult.stopDate).toISOString() : undefined,
+      executionId: draftId,
+      status,
+      startDate,
+      stopDate,
       input: inputParsed,
-      error: execResult.error,
-      cause: execResult.cause,
+      error,
+      cause,
       currentStep: draft?.currentStep,
       lastStepStartedAt: draft?.lastStepStartedAt,
       lastValidationResult: draft?.lastValidationResult,

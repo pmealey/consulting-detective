@@ -1,4 +1,4 @@
-import { GetCommand, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, PutCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, DRAFT_CASES_TABLE } from './db';
 import type { DraftCase } from './generation-state';
 
@@ -14,7 +14,7 @@ export async function getDraft(draftId: string): Promise<DraftCase | null> {
     }),
   );
   if (!result.Item) return null;
-  return result.Item as unknown as DraftCase;
+  return { ...result.Item, draftId: result.Item.draftId ?? draftId } as DraftCase;
 }
 
 /**
@@ -25,7 +25,7 @@ export async function putDraft(draftId: string, draft: DraftCase): Promise<void>
   await docClient.send(
     new PutCommand({
       TableName: DRAFT_CASES_TABLE,
-      Item: { draftId, ...draft },
+      Item: { draft, draftId },
     }),
   );
 }
@@ -39,9 +39,24 @@ export async function updateDraft(
   updates: Partial<DraftCase>,
 ): Promise<DraftCase> {
   const current = await getDraft(draftId);
-  const merged: DraftCase = { ...current, ...updates };
+  const merged: DraftCase = { ...current, ...updates, draftId };
   await putDraft(draftId, merged);
   return merged;
+}
+
+/**
+ * List drafts from the draft table (scan). Use for generation tracking UI.
+ * Returns at most `limit` items; order is not guaranteed (table has no sort key).
+ * Each item includes draftId (the partition key) and all draft fields.
+ */
+export async function listDrafts(limit: number = 50): Promise<DraftCase[]> {
+  const result = await docClient.send(
+    new ScanCommand({
+      TableName: DRAFT_CASES_TABLE,
+      Limit: limit,
+    }),
+  );
+  return (result.Items ?? []) as DraftCase[];
 }
 
 /**

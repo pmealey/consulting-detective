@@ -20,31 +20,20 @@ const PIPELINE_STEPS = [
 ] as const;
 
 const STEP_LABELS: Record<string, string> = {
-  generateTemplate: 'Template',
-  generateEvents: 'Events',
-  computeEventKnowledge: 'Event knowledge',
-  generateCharacters: 'Characters',
-  generateLocations: 'Locations',
-  computeFacts: 'Compute facts',
-  generateFacts: 'Facts',
-  generateIntroduction: 'Introduction',
-  generateCasebook: 'Casebook',
-  generateProse: 'Prose',
-  generateQuestions: 'Questions',
-  computeOptimalPath: 'Optimal path',
-  storeCase: 'Store',
+  generateTemplate: 'Generate Template',
+  generateEvents: 'Generate Events',
+  computeEventKnowledge: 'Compute Event Knowledge',
+  generateCharacters: 'Generate Characters',
+  generateLocations: 'Generate Locations',
+  computeFacts: 'Compute Facts',
+  generateFacts: 'Generate Facts',
+  generateIntroduction: 'Generate Introduction',
+  generateCasebook: 'Generate Casebook',
+  generateProse: 'Generate Prose',
+  generateQuestions: 'Generate Questions',
+  computeOptimalPath: 'Compute Optimal Path',
+  storeCase: 'Store Case',
 };
-
-interface ExecutionListItem {
-  executionId: string;
-  status: string;
-  startDate: string;
-  stopDate?: string;
-  caseDate?: string;
-  difficulty?: string;
-  crimeType?: string;
-  modelConfig?: { default: string; steps?: Record<string, string> };
-}
 
 interface ValidationResult {
   valid: boolean;
@@ -66,12 +55,12 @@ interface CaseSummary {
   modelConfig?: { default: string; steps?: Record<string, string> };
 }
 
-interface ExecutionDetail {
-  executionId: string;
+/** One draft = one full detail card (draft-driven list from GET /generation/drafts). */
+interface DraftListItem {
+  draftId: string;
   status: string;
   startDate: string;
   stopDate?: string;
-  input?: { caseDate: string; difficulty?: string; crimeType?: string; modelConfig?: unknown };
   error?: string;
   cause?: string;
   currentStep?: string;
@@ -125,16 +114,16 @@ function PipelineGraph({
   };
 
   return (
-    <div className="flex flex-wrap gap-1 items-center">
+    <div className="flex flex-wrap gap-x-1 gap-y-2 items-center">
       {PIPELINE_STEPS.map((step, i) => {
         const stepStatus = getStepStatus(step);
         const label = onStepLabel?.(step) ?? STEP_LABELS[step] ?? step;
         return (
-          <span key={step} className="flex items-center gap-0.5">
-            {i > 0 && <span className="text-stone-300 text-xs">→</span>}
+          <span key={step} className="flex items-center gap-0.5 shrink-0">
+            {i > 0 && <span className="text-stone-300 text-xs shrink-0">→</span>}
             <span
               title={label}
-              className={`text-xs px-1.5 py-0.5 rounded ${
+              className={`text-xs px-2 py-1 rounded whitespace-nowrap ${
                 stepStatus === 'completed'
                   ? 'bg-green-100 text-green-800'
                   : stepStatus === 'current'
@@ -165,6 +154,7 @@ function ErrorDetailModal({
   executionCause?: string;
   onClose: () => void;
 }) {
+  const hasExecutionError = executionError || executionCause;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
       <div
@@ -207,12 +197,20 @@ function ErrorDetailModal({
               )}
             </>
           )}
-          {(executionError || executionCause) && (
+          {hasExecutionError && (
             <div>
-              {executionError && (
-                <p className="font-medium text-stone-800 mb-1">Error</p>
+              {/* Cause is the full message; error is the short code (e.g. QuestionsInvalid) */}
+              {executionCause && (
+                <div className="mb-2">
+                  <p className="font-medium text-stone-800 mb-1">Details</p>
+                  <p className="text-stone-700 whitespace-pre-wrap">{executionCause}</p>
+                </div>
               )}
-              <p className="text-stone-700 whitespace-pre-wrap">{executionError ?? executionCause ?? ''}</p>
+              {executionError && (
+                <p className="text-stone-500 text-xs font-mono">
+                  Error code: {executionError}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -221,66 +219,138 @@ function ErrorDetailModal({
   );
 }
 
+function DraftCard({
+  draft,
+  onViewError,
+}: {
+  draft: DraftListItem;
+  onViewError: () => void;
+}) {
+  const hasErrorDetails =
+    (draft.lastValidationResult && !draft.lastValidationResult.valid) ||
+    draft.error ||
+    draft.cause;
+
+  const hasTemplate = draft.caseSummary.title ?? draft.caseSummary.narrativeTone ?? draft.caseSummary.crimeType ?? draft.caseSummary.mysteryStyle;
+
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-stone-200 bg-stone-50 flex flex-wrap items-center gap-2">
+        <span className="font-mono text-sm text-stone-600 truncate max-w-[14rem]" title={draft.draftId}>
+          {draft.draftId}
+        </span>
+        <span className={`text-xs px-1.5 py-0.5 rounded ${statusBadge(draft.status)}`}>
+          {draft.status}
+        </span>
+        <span className="text-xs text-stone-400">{formatDateTime(draft.startDate)}</span>
+      </div>
+      <div className="p-4 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div>
+            <span className="text-stone-500">Title</span>
+            <p className="font-medium text-stone-900">{draft.caseSummary.title ?? '—'}</p>
+          </div>
+          <div>
+            <span className="text-stone-500">Date / era</span>
+            <p className="font-medium text-stone-900">
+              {draft.caseSummary.date ?? '—'}
+              {draft.caseSummary.era ? ` · ${draft.caseSummary.era}` : ''}
+            </p>
+          </div>
+          <div>
+            <span className="text-stone-500">Difficulty</span>
+            <p className="font-medium text-stone-900">{draft.caseSummary.difficulty ?? '—'}</p>
+          </div>
+          <div>
+            <span className="text-stone-500">Crime type</span>
+            <p className="font-medium text-stone-900">{draft.caseSummary.crimeType ?? '—'}</p>
+          </div>
+          <div>
+            <span className="text-stone-500">Narrative tone</span>
+            <p className="font-medium text-stone-900">{draft.caseSummary.narrativeTone ?? '—'}</p>
+          </div>
+          <div>
+            <span className="text-stone-500">Mystery style</span>
+            <p className="font-medium text-stone-900">{draft.caseSummary.mysteryStyle ?? '—'}</p>
+          </div>
+          {draft.caseSummary.modelConfig && (
+            <div className="sm:col-span-2">
+              <span className="text-stone-500">Model config</span>
+              <p className="font-mono text-xs text-stone-700 mt-0.5">
+                default: {draft.caseSummary.modelConfig.default}
+                {draft.caseSummary.modelConfig.steps &&
+                  Object.keys(draft.caseSummary.modelConfig.steps).length > 0 &&
+                  ` · steps: ${JSON.stringify(draft.caseSummary.modelConfig.steps)}`}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {!hasTemplate && (
+          <p className="text-xs text-stone-500">
+            Title, crime type, tone and style appear after the Template step completes.
+          </p>
+        )}
+
+        <div>
+          <span className="text-stone-500 text-sm block mb-1">Current step</span>
+          <PipelineGraph
+            currentStep={draft.currentStep}
+            status={draft.status}
+            onStepLabel={(s) => STEP_LABELS[s] ?? s}
+          />
+        </div>
+
+        {draft.lastStepStartedAt && (
+          <p className="text-xs text-stone-500">
+            Step started: {formatDateTime(draft.lastStepStartedAt)}
+          </p>
+        )}
+
+        {hasErrorDetails && (
+          <div>
+            <button
+              type="button"
+              onClick={onViewError}
+              className="text-sm text-amber-800 hover:text-amber-900 font-medium underline"
+            >
+              {draft.lastValidationResult && !draft.lastValidationResult.valid
+                ? 'View validation details'
+                : 'View error details'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function GenerationPage() {
-  const [list, setList] = useState<ExecutionListItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<ExecutionDetail | null>(null);
-  const [errorDetailOpen, setErrorDetailOpen] = useState(false);
+  const [drafts, setDrafts] = useState<DraftListItem[]>([]);
+  const [errorDetailDraft, setErrorDetailDraft] = useState<DraftListItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
-  const [detailError, setDetailError] = useState<string | null>(null);
 
-  const fetchList = useCallback(() => {
+  const fetchDrafts = useCallback(() => {
     api
-      .get<ExecutionListItem[]>('/generation/executions')
+      .get<DraftListItem[]>('/generation/drafts')
       .then((res) => {
-        if (res.success) setList(res.data);
+        if (res.success) setDrafts(res.data);
         else setListError(res.error.message);
       })
-      .catch((err) => setListError(err instanceof Error ? err.message : 'Failed to load list'))
+      .catch((err) => setListError(err instanceof Error ? err.message : 'Failed to load drafts'))
       .finally(() => setLoading(false));
   }, []);
 
-  const fetchDetail = useCallback((id: string) => {
-    setDetailError(null);
-    api
-      .get<ExecutionDetail>(`/generation/executions/${encodeURIComponent(id)}`)
-      .then((res) => {
-        if (res.success) setDetail(res.data);
-        else setDetailError(res.error.message);
-      })
-      .catch((err) => setDetailError(err instanceof Error ? err.message : 'Failed to load detail'));
-  }, []);
-
   useEffect(() => {
-    fetchList();
-  }, [fetchList]);
+    fetchDrafts();
+  }, [fetchDrafts]);
 
+  // Poll while the page is mounted so running drafts update (every 8s)
   useEffect(() => {
-    if (selectedId) {
-      fetchDetail(selectedId);
-    } else {
-      setDetail(null);
-      const running = list.find((e) => e.status === 'RUNNING');
-      if (running) {
-        setSelectedId(running.executionId);
-      }
-    }
-  }, [selectedId, list, fetchDetail]);
-
-  // Poll detail when RUNNING
-  useEffect(() => {
-    if (!detail || detail.status !== 'RUNNING') return;
-    const t = setInterval(() => {
-      fetchDetail(detail.executionId);
-    }, POLL_INTERVAL_MS);
+    const t = setInterval(fetchDrafts, POLL_INTERVAL_MS);
     return () => clearInterval(t);
-  }, [detail?.executionId, detail?.status, fetchDetail]);
-
-  const hasErrorDetails =
-    (detail?.lastValidationResult && !detail.lastValidationResult.valid) ||
-    detail?.error ||
-    detail?.cause;
+  }, [fetchDrafts]);
 
   return (
     <div className="space-y-6">
@@ -296,138 +366,49 @@ export function GenerationPage() {
         </Link>
       </div>
 
-      <section className="rounded-lg border border-stone-200 bg-white shadow-sm overflow-hidden">
-        <h2 className="text-lg font-serif font-semibold px-4 py-3 border-b border-stone-200 bg-stone-50">
-          Executions
-        </h2>
-        {loading && (
-          <div className="p-4 text-stone-500">Loading…</div>
-        )}
-        {listError && (
-          <div className="p-4 bg-red-50 text-red-800 text-sm">{listError}</div>
-        )}
-        {!loading && !listError && list.length === 0 && (
-          <div className="p-4 text-stone-500">No executions found.</div>
-        )}
-        {!loading && !listError && list.length > 0 && (
-          <ul className="divide-y divide-stone-200">
-            {list.map((exec) => (
-              <li key={exec.executionId}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(exec.executionId)}
-                  className={`w-full text-left px-4 py-3 hover:bg-stone-50 transition-colors flex flex-wrap items-center gap-2 ${
-                    selectedId === exec.executionId ? 'bg-amber-50/60' : ''
-                  }`}
-                >
-                  <span className="font-mono text-sm text-stone-600 truncate max-w-[12rem]" title={exec.executionId}>
-                    {exec.executionId}
-                  </span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${statusBadge(exec.status)}`}>
-                    {exec.status}
-                  </span>
-                  {exec.caseDate && (
-                    <span className="text-sm text-stone-500">{exec.caseDate}</span>
-                  )}
-                  <span className="text-xs text-stone-400">{formatDateTime(exec.startDate)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <p className="text-sm text-stone-600">
+        Drafts that are currently generating or finished in the last 24 hours.
+      </p>
 
-      {detail && (
-        <section className="rounded-lg border border-stone-200 bg-white shadow-sm overflow-hidden">
-          <h2 className="text-lg font-serif font-semibold px-4 py-3 border-b border-stone-200 bg-stone-50">
-            Detail
-          </h2>
-          {detailError && (
-            <div className="p-4 bg-red-50 text-red-800 text-sm">{detailError}</div>
-          )}
-          {!detailError && (
-            <div className="p-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <div>
-                  <span className="text-stone-500">Title</span>
-                  <p className="font-medium text-stone-900">{detail.caseSummary.title ?? '—'}</p>
-                </div>
-                <div>
-                  <span className="text-stone-500">Date / era</span>
-                  <p className="font-medium text-stone-900">
-                    {detail.caseSummary.date ?? '—'}
-                    {detail.caseSummary.era ? ` · ${detail.caseSummary.era}` : ''}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-stone-500">Difficulty</span>
-                  <p className="font-medium text-stone-900">{detail.caseSummary.difficulty ?? '—'}</p>
-                </div>
-                <div>
-                  <span className="text-stone-500">Crime type</span>
-                  <p className="font-medium text-stone-900">{detail.caseSummary.crimeType ?? '—'}</p>
-                </div>
-                <div>
-                  <span className="text-stone-500">Narrative tone</span>
-                  <p className="font-medium text-stone-900">{detail.caseSummary.narrativeTone ?? '—'}</p>
-                </div>
-                <div>
-                  <span className="text-stone-500">Mystery style</span>
-                  <p className="font-medium text-stone-900">{detail.caseSummary.mysteryStyle ?? '—'}</p>
-                </div>
-                {detail.caseSummary.modelConfig && (
-                  <div className="sm:col-span-2">
-                    <span className="text-stone-500">Model config</span>
-                    <p className="font-mono text-xs text-stone-700 mt-0.5">
-                      default: {detail.caseSummary.modelConfig.default}
-                      {detail.caseSummary.modelConfig.steps &&
-                        Object.keys(detail.caseSummary.modelConfig.steps).length > 0 &&
-                        ` · steps: ${JSON.stringify(detail.caseSummary.modelConfig.steps)}`}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <span className="text-stone-500 text-sm block mb-1">Current step</span>
-                <PipelineGraph
-                  currentStep={detail.currentStep}
-                  status={detail.status}
-                  onStepLabel={(s) => STEP_LABELS[s] ?? s}
-                />
-              </div>
-
-              {detail.lastStepStartedAt && (
-                <p className="text-xs text-stone-500">
-                  Step started: {formatDateTime(detail.lastStepStartedAt)}
-                </p>
-              )}
-
-              {hasErrorDetails && (
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setErrorDetailOpen(true)}
-                    className="text-sm text-amber-800 hover:text-amber-900 font-medium underline"
-                  >
-                    {detail.lastValidationResult && !detail.lastValidationResult.valid
-                      ? 'View validation details'
-                      : 'View error details'}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
+      {loading && (
+        <div className="rounded-lg border border-stone-200 bg-white p-6 text-stone-500">
+          Loading…
+        </div>
+      )}
+      {listError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800 text-sm">
+          {listError}
+        </div>
+      )}
+      {!loading && !listError && drafts.length === 0 && (
+        <div className="rounded-lg border border-stone-200 bg-white p-6 text-stone-500">
+          No active or recent drafts.
+        </div>
+      )}
+      {!loading && !listError && drafts.length > 0 && (
+        <ul className="space-y-4">
+          {drafts.map((draft) => (
+            <li key={draft.draftId}>
+              <DraftCard
+                draft={draft}
+                onViewError={() => setErrorDetailDraft(draft)}
+              />
+            </li>
+          ))}
+        </ul>
       )}
 
-      {errorDetailOpen && detail && (
+      {errorDetailDraft && (
         <ErrorDetailModal
-          title={detail.lastValidationResult && !detail.lastValidationResult.valid ? 'Validation failed' : 'Execution error'}
-          validationResult={detail.lastValidationResult}
-          executionError={detail.error}
-          executionCause={detail.cause}
-          onClose={() => setErrorDetailOpen(false)}
+          title={
+            errorDetailDraft.lastValidationResult && !errorDetailDraft.lastValidationResult.valid
+              ? 'Validation failed'
+              : 'Execution error'
+          }
+          validationResult={errorDetailDraft.lastValidationResult}
+          executionError={errorDetailDraft.error}
+          executionCause={errorDetailDraft.cause}
+          onClose={() => setErrorDetailDraft(null)}
         />
       )}
     </div>

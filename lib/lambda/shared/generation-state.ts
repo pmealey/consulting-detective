@@ -76,6 +76,8 @@ export const GenerateCaseInputSchema = z.object({
 // ============================================
 
 export interface DraftCase {
+  /** Set when the draft is loaded from the table (partition key). */
+  draftId: string;
   template?: CaseTemplate;
   events?: Record<string, EventDraft>;
   computedKnowledge?: ComputedKnowledge;
