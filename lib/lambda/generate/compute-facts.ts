@@ -33,20 +33,24 @@ import type {
  *    - Subject -> revealable facts (characters: knows/suspects/believes;
  *      locations: from computedKnowledge.locationReveals)
  *
- * 4. Find connected components in the graph. Rather than seeding from
- *    specific introduction facts (which aren't chosen yet), we ensure
- *    the entire graph is fully connected.
+ * 4. Verify directed reachability. The casebook is a directed graph:
+ *    knowing a fact leads to its subjects (factToSubjects), visiting a
+ *    subject reveals new facts (subjectToFacts). We check that every
+ *    subject is reachable from every fact via this directed BFS. This
+ *    guarantees that no matter which facts GenerateIntroduction later
+ *    selects as seeds, all casebook entries will be reachable.
  *
- * 5. Create bridge fact skeletons connecting smaller components to
- *    the largest, so the graph is one connected component.
+ * 5. Create bridge fact skeletons to fix any directed-unreachable
+ *    subjects. A bridge connects a reachable character to an unreachable
+ *    subject, providing a directed path through the character's knowledge.
  *
  * 6. Create red herring / incidental fact skeletons in sparse areas.
  *
  * Introduction fact selection is NOT done here — it moves to
  * GenerateIntroduction where the AI can select facts that form a
- * coherent opening narrative. Because this step guarantees full graph
- * connectivity, any introduction fact selection will be able to reach
- * all subjects and facts through BFS.
+ * coherent opening narrative. Because this step guarantees directed
+ * reachability, any introduction fact selection will produce a fully
+ * reachable casebook.
  */
 export const handler = async (state: OperationalState): Promise<OperationalState> => {
   const { draftId, input } = state;
@@ -77,7 +81,10 @@ export const handler = async (state: OperationalState): Promise<OperationalState
     roleMapping,
   );
 
-  await updateDraft(draftId, { factSkeletons, factGraph });
+  // computeFacts mutates characters in-place: bridge and red herring facts
+  // are added to character knowledgeStates so the graph connects. We must
+  // persist the updated characters alongside the new skeletons and graph.
+  await updateDraft(draftId, { factSkeletons, factGraph, characters });
   return state;
 };
 
@@ -91,6 +98,19 @@ export function computeFacts(
   computedKnowledge: ComputedKnowledge,
   roleMapping: Record<string, string>,
 ): { factSkeletons: FactSkeleton[]; factGraph: FactGraph } {
+  // ── Step 0: Clean stale bridge/red-herring entries from characters ──
+  // On re-runs, characters may still carry knowledgeState entries from a
+  // previous ComputeFacts invocation (bridge_* and red_herring_* facts).
+  // Remove them so we start fresh — new bridges and red herrings will be
+  // added below based on the current graph structure.
+  for (const character of Object.values(characters)) {
+    for (const factId of Object.keys(character.knowledgeState)) {
+      if (factId.startsWith('fact_bridge_') || factId.startsWith('fact_red_herring_')) {
+        delete character.knowledgeState[factId];
+      }
+    }
+  }
+
   // ── Step 1: Collect true fact skeletons from event reveals ───────
   const skeletons = collectEventRevealSkeletons(events, roleMapping);
 
@@ -101,29 +121,23 @@ export function computeFacts(
   // ── Step 3: Build the bipartite graph ────────────────────────────
   let graph = buildFactGraph(skeletons, characters, computedKnowledge);
 
-  // ── Step 4: Detect disconnected components ───────────────────────
-  // We check full graph connectivity rather than seeding from specific
-  // facts. This ensures the graph is fully connected regardless of which
-  // facts GenerateIntroduction later selects as introduction facts.
-  // Any introduction fact selection from a connected graph will be able
-  // to reach all subjects and facts through BFS.
-  const { components, largestComponent } = findConnectedComponents(
+  // ── Step 4 & 5: Directed reachability check + bridge creation ────
+  // The casebook is a directed graph: knowing a fact leads to its
+  // subjects (factToSubjects), visiting a subject reveals new facts
+  // (subjectToFacts). We verify that every subject is reachable from
+  // every fact via this directed BFS. If not, we create bridge facts
+  // to fix unreachable subjects. Iterate until fully reachable.
+  // ensureDirectedReachability pushes bridges directly onto skeletons
+  // and rebuilds the graph internally.
+  ensureDirectedReachability(
     graph,
     skeletons,
+    characters,
+    computedKnowledge,
   );
 
-  // ── Step 5: Create bridge facts for connectivity ─────────────────
-  // Bridge every smaller component to the largest component so the
-  // entire graph is connected. GenerateIntroduction can then pick any
-  // facts as seeds and the full graph will be reachable.
-  const bridgeSkeletons = createBridgeSkeletons(
-    components,
-    largestComponent,
-    graph,
-    characters,
-    skeletons,
-  );
-  skeletons.push(...bridgeSkeletons);
+  // Rebuild graph after bridges were added
+  graph = buildFactGraph(skeletons, characters, computedKnowledge);
 
   // ── Step 6: Create red herring / incidental facts ────────────────
   const redHerringSkeletons = createRedHerringSkeletons(
@@ -134,7 +148,7 @@ export function computeFacts(
   );
   skeletons.push(...redHerringSkeletons);
 
-  // Rebuild graph with all skeletons (bridges + red herrings added)
+  // Rebuild graph with red herrings added
   graph = buildFactGraph(skeletons, characters, computedKnowledge);
 
   return { factSkeletons: skeletons, factGraph: graph };
@@ -320,210 +334,198 @@ function buildFactGraph(
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Step 4: Find connected components
+// Steps 4 & 5: Directed reachability check + bridge creation
 // ════════════════════════════════════════════════════════════════════
 
 /**
- * A connected component in the bipartite graph: a set of subjects and
- * facts that are mutually reachable through fact-subject edges.
- */
-interface GraphComponent {
-  subjects: Set<string>;
-  facts: Set<string>;
-}
-
-/**
- * Finds all connected components in the bipartite graph using BFS.
+ * Performs a directed BFS from a seed fact through the bipartite graph,
+ * following the same directed flow the casebook uses:
  *
- * Rather than seeding from specific "introduction" facts (which aren't
- * chosen yet), we find ALL connected components. The bridge step then
- * connects every smaller component to the largest one, ensuring the
- * entire graph is connected. This means GenerateIntroduction can later
- * pick any facts as seeds and the full graph will be reachable.
+ *   know fact F → F is about subjects S (factToSubjects)
+ *                → visit S → S reveals facts G (subjectToFacts)
+ *                → know G → ...
+ *
+ * Returns the set of all subjects reachable from the seed fact.
  */
-function findConnectedComponents(
+function directedBfsFromFact(
+  seedFactId: string,
   graph: FactGraph,
-  skeletons: FactSkeleton[],
-): { components: GraphComponent[]; largestComponent: GraphComponent } {
-  const allSubjects = new Set(Object.keys(graph.subjectToFacts));
-  const allFacts = new Set(skeletons.map((s) => s.factId));
+): { reachableSubjects: Set<string>; reachableFacts: Set<string> } {
+  const reachableFacts = new Set<string>([seedFactId]);
+  const reachableSubjects = new Set<string>();
 
-  // Build a reverse index: subject -> facts that reference it (via factToSubjects).
-  // This is the inverse of factToSubjects — "which facts mention this subject?"
-  // We need this because a subject might be referenced by a fact it doesn't
-  // reveal (e.g. a fact about a location that the location has no physical
-  // evidence for). Those facts still connect the subject to the component.
-  const subjectToReferencingFacts: Record<string, string[]> = {};
-  for (const [factId, subjects] of Object.entries(graph.factToSubjects)) {
-    for (const subjectId of subjects) {
-      if (!subjectToReferencingFacts[subjectId]) {
-        subjectToReferencingFacts[subjectId] = [];
-      }
-      subjectToReferencingFacts[subjectId].push(factId);
-    }
-  }
+  // BFS queue contains fact IDs to process
+  const queue: string[] = [seedFactId];
 
-  const visitedSubjects = new Set<string>();
-  const visitedFacts = new Set<string>();
-  const components: GraphComponent[] = [];
+  while (queue.length > 0) {
+    const factId = queue.shift()!;
 
-  // BFS from each unvisited subject to discover its component
-  for (const startSubject of allSubjects) {
-    if (visitedSubjects.has(startSubject)) continue;
+    // Fact → subjects (factToSubjects): knowing this fact leads to these subjects
+    for (const subjectId of graph.factToSubjects[factId] ?? []) {
+      if (reachableSubjects.has(subjectId)) continue;
+      reachableSubjects.add(subjectId);
 
-    const component: GraphComponent = {
-      subjects: new Set<string>(),
-      facts: new Set<string>(),
-    };
-    const queue: string[] = [startSubject];
-    visitedSubjects.add(startSubject);
-    component.subjects.add(startSubject);
-
-    while (queue.length > 0) {
-      const subjectId = queue.shift()!;
-
-      // Collect all facts connected to this subject:
-      // 1. Facts this subject reveals (subjectToFacts)
-      // 2. Facts that reference this subject (subjectToReferencingFacts)
-      const connectedFacts = new Set<string>();
-      for (const fid of graph.subjectToFacts[subjectId] ?? []) {
-        connectedFacts.add(fid);
-      }
-      for (const fid of subjectToReferencingFacts[subjectId] ?? []) {
-        connectedFacts.add(fid);
-      }
-
-      for (const factId of connectedFacts) {
-        if (visitedFacts.has(factId)) continue;
-        visitedFacts.add(factId);
-        component.facts.add(factId);
-
-        // Follow fact -> subjects edges
-        const subjects = graph.factToSubjects[factId] ?? [];
-        for (const nextSubjectId of subjects) {
-          if (visitedSubjects.has(nextSubjectId)) continue;
-          if (
-            graph.subjectToFacts[nextSubjectId] !== undefined ||
-            subjectToReferencingFacts[nextSubjectId] !== undefined
-          ) {
-            visitedSubjects.add(nextSubjectId);
-            component.subjects.add(nextSubjectId);
-            queue.push(nextSubjectId);
-          }
+      // Subject → facts (subjectToFacts): visiting this subject reveals these facts
+      for (const revealedFactId of graph.subjectToFacts[subjectId] ?? []) {
+        if (!reachableFacts.has(revealedFactId)) {
+          reachableFacts.add(revealedFactId);
+          queue.push(revealedFactId);
         }
       }
     }
-
-    components.push(component);
   }
 
-  // Also pick up any orphan facts (facts with no subjects in the graph)
-  for (const factId of allFacts) {
-    if (!visitedFacts.has(factId)) {
-      components.push({
-        subjects: new Set<string>(),
-        facts: new Set([factId]),
-      });
-    }
-  }
-
-  // Find the largest component by total node count (subjects + facts)
-  let largest = components[0];
-  let largestSize = 0;
-  for (const comp of components) {
-    const size = comp.subjects.size + comp.facts.size;
-    if (size > largestSize) {
-      largestSize = size;
-      largest = comp;
-    }
-  }
-
-  return { components, largestComponent: largest };
+  return { reachableSubjects, reachableFacts };
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Step 5: Create bridge facts for connectivity
-// ════════════════════════════════════════════════════════════════════
-
 /**
- * For each component that isn't the largest, creates a bridge fact
- * skeleton connecting a character in the largest component to a
- * subject in the smaller component.
+ * Ensures directed reachability: from every fact, a directed BFS must
+ * reach every subject. This guarantees that no matter which facts
+ * GenerateIntroduction later picks as seeds, all casebook entries will
+ * be reachable via the unlock→reveal→unlock chain.
  *
- * This ensures the entire graph is one connected component, so that
- * GenerateIntroduction can later pick any facts as seeds and the full
- * graph will be reachable via BFS.
+ * When unreachable subjects are found, creates bridge fact skeletons
+ * to fix them. A bridge connects a reachable character (who can reveal
+ * the bridge fact) to an unreachable subject (who the bridge fact is
+ * about), providing a directed path through the character's knowledge.
  *
- * Strategy: round-robin through characters in the largest component,
- * picking one subject from each smaller component to bridge to.
+ * Iterates until the graph is fully directed-reachable, since adding
+ * bridges can change the reachability landscape.
  */
-function createBridgeSkeletons(
-  components: GraphComponent[],
-  largestComponent: GraphComponent,
+function ensureDirectedReachability(
   graph: FactGraph,
+  skeletons: FactSkeleton[],
   characters: Record<string, CharacterDraft>,
-  _existingSkeletons: FactSkeleton[],
+  computedKnowledge: ComputedKnowledge,
 ): FactSkeleton[] {
-  // If there's only one component, the graph is already connected
-  if (components.length <= 1) return [];
+  const allBridges: FactSkeleton[] = [];
+  const allCharacterIds = Object.keys(characters);
 
-  const bridgeSkeletons: FactSkeleton[] = [];
+  // Iterate: check reachability, create bridges, rebuild graph, repeat.
+  // Each iteration fixes at least one unreachable subject, so this
+  // converges in at most O(subjects) iterations.
+  for (let iteration = 0; iteration < 100; iteration++) {
+    // Find subjects unreachable from ANY fact. We check from every fact
+    // because introduction facts haven't been chosen yet — we need the
+    // property to hold regardless of which facts are selected.
+    //
+    // Optimization: if the graph is directed-reachable from one arbitrary
+    // fact, it's reachable from all facts (because any fact reachable from
+    // the seed can itself reach everything the seed can). So we only need
+    // to check from one fact, UNLESS there are facts unreachable from the
+    // seed — those live in disconnected components.
+    //
+    // Strategy: pick an arbitrary fact, do directed BFS, find unreachable
+    // subjects. Also find facts not reached (disconnected components).
+    // Bridge both.
+    const allSubjects = new Set(Object.keys(graph.subjectToFacts));
+    const seedFact = skeletons[0]?.factId;
+    if (!seedFact) break;
 
-  // Find characters in the largest component
-  const largestCharacterIds: string[] = [];
-  for (const subjectId of largestComponent.subjects) {
-    if (characters[subjectId] !== undefined) {
-      largestCharacterIds.push(subjectId);
-    }
-  }
+    const { reachableSubjects, reachableFacts } = directedBfsFromFact(seedFact, graph);
 
-  if (largestCharacterIds.length === 0) {
-    // No characters in the largest component — can't bridge via character
-    // knowledge. This shouldn't happen in a well-formed case.
-    return [];
-  }
-
-  let charIdx = 0;
-  for (const component of components) {
-    // Skip the largest component — it's the one we're bridging TO
-    if (component === largestComponent) continue;
-
-    // Pick a subject from this smaller component to bridge to.
-    // Prefer a character subject if one exists (more natural for narrative),
-    // otherwise pick any subject.
-    let targetSubject: string | undefined;
-    for (const subjectId of component.subjects) {
-      if (characters[subjectId] !== undefined) {
-        targetSubject = subjectId;
-        break;
+    // Find unreachable subjects
+    const unreachableSubjects: string[] = [];
+    for (const subjectId of allSubjects) {
+      if (!reachableSubjects.has(subjectId)) {
+        unreachableSubjects.push(subjectId);
       }
     }
-    if (!targetSubject) {
-      // No character in this component — pick any subject
-      targetSubject = [...component.subjects][0];
+
+    // Also find facts in disconnected components (not reachable from seed)
+    const unreachableFacts: string[] = [];
+    for (const skeleton of skeletons) {
+      if (!reachableFacts.has(skeleton.factId)) {
+        unreachableFacts.push(skeleton.factId);
+      }
     }
-    if (!targetSubject) continue; // empty component (orphan facts only)
 
-    const bridgeCharId = largestCharacterIds[charIdx % largestCharacterIds.length];
-    charIdx++;
+    if (unreachableSubjects.length === 0 && unreachableFacts.length === 0) {
+      break; // Fully reachable — done
+    }
 
-    const bridgeId = `fact_bridge_${bridgeCharId}_to_${targetSubject}`;
-    bridgeSkeletons.push({
-      factId: bridgeId,
-      subjects: [bridgeCharId, targetSubject],
-      veracity: 'true',
-      source: {
-        type: 'bridge',
-        fromCharacterId: bridgeCharId,
-        toSubject: targetSubject,
-      },
-    });
+    // Find characters in the reachable set to use as bridge sources.
+    // These characters can reveal bridge facts, providing directed paths
+    // to unreachable subjects.
+    const reachableCharIds = allCharacterIds.filter(
+      (cid) => reachableSubjects.has(cid),
+    );
 
-    // Add to the character's knowledge so the graph connects
-    characters[bridgeCharId].knowledgeState[bridgeId] = 'knows';
+    if (reachableCharIds.length === 0) {
+      // No reachable characters — can't create bridges. This shouldn't
+      // happen in a well-formed case (at least one character should be
+      // reachable from the first fact).
+      break;
+    }
+
+    let charIdx = 0;
+    const bridgedSubjects = new Set<string>();
+
+    // Bridge unreachable subjects
+    for (const targetSubject of unreachableSubjects) {
+      if (bridgedSubjects.has(targetSubject)) continue;
+
+      const bridgeCharId = reachableCharIds[charIdx % reachableCharIds.length];
+      charIdx++;
+
+      const bridgeId = `fact_bridge_${bridgeCharId}_to_${targetSubject}`;
+      const bridge: FactSkeleton = {
+        factId: bridgeId,
+        subjects: [bridgeCharId, targetSubject],
+        veracity: 'true',
+        source: {
+          type: 'bridge',
+          fromCharacterId: bridgeCharId,
+          toSubject: targetSubject,
+        },
+      };
+      skeletons.push(bridge);
+      allBridges.push(bridge);
+
+      // Add to the character's knowledge so they reveal it
+      characters[bridgeCharId].knowledgeState[bridgeId] = 'knows';
+      bridgedSubjects.add(targetSubject);
+    }
+
+    // Bridge disconnected facts: for facts not reachable from the seed,
+    // their subjects may also be unreachable. Create a bridge from a
+    // reachable character to one of the fact's subjects.
+    for (const factId of unreachableFacts) {
+      const subjects = graph.factToSubjects[factId] ?? [];
+      // If any subject was already bridged or is reachable, skip
+      if (subjects.some((s) => reachableSubjects.has(s) || bridgedSubjects.has(s))) {
+        continue;
+      }
+      // Bridge to the first subject of this fact
+      const targetSubject = subjects[0];
+      if (!targetSubject || bridgedSubjects.has(targetSubject)) continue;
+
+      const bridgeCharId = reachableCharIds[charIdx % reachableCharIds.length];
+      charIdx++;
+
+      const bridgeId = `fact_bridge_${bridgeCharId}_to_${targetSubject}`;
+      const bridge: FactSkeleton = {
+        factId: bridgeId,
+        subjects: [bridgeCharId, targetSubject],
+        veracity: 'true',
+        source: {
+          type: 'bridge',
+          fromCharacterId: bridgeCharId,
+          toSubject: targetSubject,
+        },
+      };
+      skeletons.push(bridge);
+      allBridges.push(bridge);
+
+      characters[bridgeCharId].knowledgeState[bridgeId] = 'knows';
+      bridgedSubjects.add(targetSubject);
+    }
+
+    // Rebuild graph with new bridges and re-check
+    graph = buildFactGraph(skeletons, characters, computedKnowledge);
   }
 
-  return bridgeSkeletons;
+  return allBridges;
 }
 
 // ════════════════════════════════════════════════════════════════════
