@@ -613,7 +613,6 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       parameters: {
         'input.$': '$.input',
         'draftId.$': '$.draftId',
-        'validationResult.$': '$.validationResult',
         'stepRetries': 0,
       },
     });
