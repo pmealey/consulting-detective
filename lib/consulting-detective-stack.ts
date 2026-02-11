@@ -456,7 +456,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         computeEventKnowledge,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 1),
         eventsValidationFailed,
       )
       .otherwise(incrementEventsRetries);
@@ -489,7 +489,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         initGenerateLocationsRetries,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 1),
         charactersValidationFailed,
       )
       .otherwise(incrementCharsRetries);
@@ -520,7 +520,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         computeFacts,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 1),
         locationsValidationFailed,
       )
       .otherwise(incrementLocsRetries);
@@ -551,7 +551,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         generateIntroduction,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 1),
         factsValidationFailed,
       )
       .otherwise(incrementFactsRetries);
@@ -588,7 +588,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         generateProse,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 1),
         casebookValidationFailed,
       )
       .otherwise(incrementCasebookRetries);
@@ -633,7 +633,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
         computeOptimalPath,
       )
       .when(
-        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 2),
+        sfn.Condition.numberGreaterThanEquals('$.stepRetries', 1),
         questionsValidationFailed,
       )
       .otherwise(incrementGenerateQuestionsRetries);
