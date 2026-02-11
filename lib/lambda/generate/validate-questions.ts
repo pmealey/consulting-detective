@@ -10,7 +10,7 @@ import type {
  * Pure logic — no LLM call. Validates:
  * - Every question has a valid answer type ('person', 'location', or 'fact')
  * - For 'fact' answers: factCategory is present, acceptedIds reference valid factIds,
- *   answer facts are reachable, and their categories match factCategory
+ *   and their categories match factCategory (reachability is guaranteed by ComputeFacts/casebook generation)
  * - For 'person' answers: acceptedIds reference valid characterIds
  * - For 'location' answers: acceptedIds reference valid locationIds
  *
@@ -20,35 +20,28 @@ export const handler = async (state: OperationalState): Promise<OperationalState
   const { draftId } = state;
   const draft = await getDraft(draftId);
   const { questions, facts, characters, locations } = draft ?? {};
-  const casebookValidationResult =
-    state.validationResult && 'reachableFactIds' in state.validationResult
-      ? state.validationResult
-      : undefined;
 
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  const fail = async (result: ValidationResult) => {
+    await updateDraft(draftId, { lastValidationResult: result });
+    return { ...state, validationResult: result };
+  };
+
   if (!questions || questions.length === 0) {
     errors.push('No questions in state');
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    return fail({ valid: false, errors, warnings });
   }
 
   if (!facts || Object.keys(facts).length === 0) {
     errors.push('No facts in state; cannot validate question answers');
-    return { ...state, validationResult: { valid: false, errors, warnings } };
-  }
-
-  if (!casebookValidationResult?.valid || !casebookValidationResult.reachableFactIds) {
-    errors.push(
-      'Casebook validation was not run or is invalid; cannot verify question-fact reachability',
-    );
-    return { ...state, validationResult: { valid: false, errors, warnings } };
+    return fail({ valid: false, errors, warnings });
   }
 
   const factIds = new Set(Object.keys(facts));
   const characterIds = new Set(characters ? Object.keys(characters) : []);
   const locationIds = new Set(locations ? Object.keys(locations) : []);
-  const reachableFactIds = new Set(casebookValidationResult.reachableFactIds);
 
   const validAnswerTypes = new Set(['person', 'location', 'fact']);
 
@@ -86,10 +79,6 @@ export const handler = async (state: OperationalState): Promise<OperationalState
             if (fact?.veracity === 'false') {
               errors.push(
                 `Question ${question.questionId}: answer fact "${id}" has veracity "false"; only true facts may be accepted answers`,
-              );
-            } else if (!reachableFactIds.has(id)) {
-              errors.push(
-                `Question ${question.questionId}: answer fact "${id}" is not reachable from introduction and casebook`,
               );
             } else if (answer.factCategory && fact && fact.category !== answer.factCategory) {
               errors.push(
