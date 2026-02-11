@@ -33,7 +33,7 @@ export interface CasebookEntry {
   scene: string;
 
   /** characterIds of characters present/available at this entry */
-  characters: string[];
+  characterIds: string[];
 
   /** factIds discoverable by visiting this entry */
   revealsFactIds: string[];

@@ -212,7 +212,7 @@ export interface CasebookEntryDraft {
   label: string;
   address: string;
   locationId: string;
-  characters: string[];
+  characterIds: string[];
   revealsFactIds: string[];
   requiresAnyFact: string[];
 }
@@ -438,7 +438,7 @@ export const CasebookSchema = z.record(
     label: z.string().min(1),
     address: z.string().min(1),
     locationId: z.string().min(1),
-    characters: z.array(z.string()),
+    characterIds: z.array(z.string()),
     revealsFactIds: z.array(z.string()),
     requiresAnyFact: z.array(z.string().min(1)).min(1),
   }),
@@ -457,7 +457,7 @@ export const CasebookPolishSchema = z.record(
     entryId: z.string().min(1),
     label: z.string().min(1),
     address: z.string().min(1),
-    characters: z.array(z.string()),
+    characterIds: z.array(z.string()),
   }),
 );
 

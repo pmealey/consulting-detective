@@ -106,7 +106,7 @@ export const handler = async (state: OperationalState): Promise<OperationalState
       address: draft.address,
       locationId: draft.locationId,
       scene: prose[id] ?? '',
-      characters: draft.characters,
+      characterIds: draft.characterIds,
       revealsFactIds: draft.revealsFactIds,
       requiresAnyFact: draft.requiresAnyFact ?? [],
     };

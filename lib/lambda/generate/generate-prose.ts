@@ -165,7 +165,7 @@ function buildEntryContext(
   facts: Record<string, FactDraft>,
 ): string {
   const location = locations[entry.locationId];
-  const presentChars = entry.characters
+  const presentChars = entry.characterIds
     .map((cid) => characters[cid])
     .filter(Boolean);
   const revealedFacts = entry.revealsFactIds

@@ -71,7 +71,7 @@ Each entry must match this schema:
   "entryId": string,         // MUST match the skeleton entryId exactly
   "label": string,           // Display name, e.g. "Inspector Lestrade" or "The Pemberton Residence"
   "address": string,         // Display address, e.g. "Scotland Yard, Whitehall"
-  "characters": string[]     // characterIds physically present and interviewable at this entry
+  "characterIds": string[]   // characterIds physically present and interviewable at this entry — MUST use EXACT characterId values from the Characters list below (e.g. "char_lestrade"), NOT character names
 }
 
 ## YOUR RESPONSIBILITIES
@@ -80,7 +80,8 @@ Each entry must match this schema:
 
 2. **Addresses**: Give each entry an era-appropriate address. These appear in the player's casebook as the address they visit. Be specific and atmospheric.
 
-3. **Characters present**: Decide which characters are physically present at each entry. Rules:
+3. **Characters present** (the \`characterIds\` array): Decide which characters are physically present at each entry. Rules:
+   - You MUST use the exact characterId strings from the Characters list below (e.g. "char_inspector_lestrade"). Do NOT use character names, do NOT invent IDs.
    - Characters should be present at entries where they can plausibly be found and interviewed.
    - A character's entry should include that character (unless their currentStatus prevents it — e.g. deceased, missing).
    - Location entries may have 0 or more characters present — whoever would plausibly be there.
@@ -91,7 +92,7 @@ Each entry must match this schema:
 
 - Do NOT change entryIds, locationIds, revealsFactIds, or requiresAnyFact — these are structurally fixed.
 - Do NOT add or remove entries — the set of entries is fixed.
-- You are ONLY providing labels, addresses, and character presence.
+- You are ONLY providing labels, addresses, and characterIds (character presence).
 
 ## CONTEXT
 
@@ -116,8 +117,8 @@ Narrative Tone: ${template.narrativeTone}
 
 ${skeletonSummary}
 
-## Characters
-${Object.values(characters).map((c) => `  - ${c.characterId} (${c.name}): ${c.mysteryRole}, ${c.societalRole}${c.currentStatus ? ` [current status: ${c.currentStatus}]` : ''}`).join('\n')}
+## Characters — VALID characterId VALUES (use these exact strings in characterIds arrays)
+${Object.values(characters).map((c) => `  - characterId: "${c.characterId}" — ${c.name}, ${c.mysteryRole}, ${c.societalRole}${c.currentStatus ? ` [current status: ${c.currentStatus}]` : ''}`).join('\n')}
 
 ## Locations
 ${Object.values(locations).map((l) => `  - ${l.locationId} (${l.name}): ${l.type} — ${l.description}`).join('\n')}
@@ -145,7 +146,8 @@ ${validationResult.errors.map((e) => `- ${e}`).join('\n')}`
   );
 
   // ── Phase 3: Merge AI polish into programmatic skeleton ──────────
-  const casebook = mergeCasebook(skeleton, polish);
+  const validCharacterIds = new Set(Object.keys(characters));
+  const casebook = mergeCasebook(skeleton, polish, validCharacterIds);
 
   await updateDraft(draftId, { casebook });
   return state;
@@ -217,7 +219,7 @@ export function buildCasebookSkeleton(
       label: character.name,
       address: '',
       locationId,
-      characters: [charId],
+      characterIds: [charId],
       revealsFactIds: dedup(revealsFactIds),
       requiresAnyFact: dedup(finalGates),
     };
@@ -256,7 +258,7 @@ export function buildCasebookSkeleton(
       label: location.name,
       address: '',
       locationId: locId,
-      characters: [],
+      characterIds: [],
       revealsFactIds,
       requiresAnyFact: dedup(finalGates),
     };
@@ -371,7 +373,7 @@ function formatSkeletonForPrompt(
 
       // Determine if this is a character or location entry
       const isCharEntry = entry.entryId.startsWith('entry_char_') ||
-        entry.characters.some((cid) => characters[cid]);
+        entry.characterIds.some((cid) => characters[cid]);
       const subjectType = isCharEntry ? 'CHARACTER' : 'LOCATION';
 
       return `### ${entry.entryId} [${subjectType}]
@@ -424,21 +426,30 @@ function getMysteryStyleCasebookConstraints(mysteryStyle: string): string {
   }
 }
 
-/** Merge AI polish into the programmatic skeleton. */
+/** Merge AI polish into the programmatic skeleton, filtering invalid character IDs. */
 function mergeCasebook(
   skeleton: Record<string, CasebookEntryDraft>,
-  polish: Record<string, { entryId: string; label: string; address: string; characters: string[] }>,
+  polish: Record<string, { entryId: string; label: string; address: string; characterIds: string[] }>,
+  validCharacterIds: Set<string>,
 ): Record<string, CasebookEntryDraft> {
   const result: Record<string, CasebookEntryDraft> = {};
 
   for (const [entryId, entry] of Object.entries(skeleton)) {
     const polished = polish[entryId];
+
+    // Filter AI-provided characterIds to only valid ones; fall back to skeleton if none survive
+    let characterIds = entry.characterIds;
+    if (polished?.characterIds) {
+      const filtered = polished.characterIds.filter((id) => validCharacterIds.has(id));
+      characterIds = filtered.length > 0 ? filtered : entry.characterIds;
+    }
+
     result[entryId] = {
       ...entry,
       // Apply AI polish if available, keep skeleton defaults otherwise
       label: polished?.label ?? entry.label,
       address: polished?.address ?? entry.address,
-      characters: polished?.characters ?? entry.characters,
+      characterIds,
     };
   }
 

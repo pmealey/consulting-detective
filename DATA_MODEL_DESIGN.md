@@ -26,7 +26,7 @@ erDiagram
     Character }o--o{ Fact : "knowledgeState"
 
     CasebookEntry }o--|| Location : "locationId"
-    CasebookEntry }o--o{ Character : "characters"
+    CasebookEntry }o--o{ Character : "characterIds"
     CasebookEntry }o--o{ Fact : "revealsFactIds"
     CasebookEntry }o--o{ Fact : "requiresAnyFact"
 

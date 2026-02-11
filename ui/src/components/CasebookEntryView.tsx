@@ -16,7 +16,7 @@ export function CasebookEntryView({
   isNewVisit,
   showNewFactsDiscovered = false,
 }: CasebookEntryViewProps) {
-  const presentCharacters = entry.characters
+  const presentCharacters = entry.characterIds
     .map((id) => characters[id])
     .filter(Boolean);
 

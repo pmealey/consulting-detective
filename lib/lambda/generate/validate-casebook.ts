@@ -58,10 +58,10 @@ export const handler = async (state: OperationalState): Promise<OperationalState
         `Entry "${entry.entryId}": locationId "${entry.locationId}" is not a valid location`,
       );
     }
-    for (const charId of entry.characters) {
+    for (const charId of entry.characterIds) {
       if (!allCharacterIds.has(charId)) {
         errors.push(
-          `Entry "${entry.entryId}": characters references unknown character "${charId}"`,
+          `Entry "${entry.entryId}": characterIds references unknown character "${charId}"`,
         );
       }
     }

@@ -398,8 +398,8 @@ function CasebookEntryRow({ entry }: { entry: CasebookEntry }) {
             />
           )}
           <KeyValue
-            label="characters"
-            value={entry.characters.length ? entry.characters.join(', ') : '—'}
+            label="characterIds"
+            value={entry.characterIds.length ? entry.characterIds.join(', ') : '—'}
             mono
           />
           <KeyValue
