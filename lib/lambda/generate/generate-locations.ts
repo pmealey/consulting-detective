@@ -54,8 +54,11 @@ Each location must match this schema:
   "audibleFrom": string[]        // locationIds from which events here can be heard
 }
 
+HARD REQUIREMENTS (violations will fail validation):
+- You MUST create a location entry for EVERY placeholder listed below. The Record key and locationId MUST exactly match the placeholder string. Missing even one placeholder will fail validation.
+- Every locationId referenced in accessibleFrom, visibleFrom, or audibleFrom MUST exist as a key in your output. Do NOT reference locations you haven't defined.
+
 Guidelines:
-- Create a location for each placeholder used in the events.
 - Create additional locations for where characters can be found during the investigation. Some characters may be present at the same location.
 - When a character has audibly or visually witnessed an event, create additional locations for the locations they were at when the event happened.
 - Perception and accessibility edges (accessibleFrom, visibleFrom, audibleFrom) are CRITICAL for the mystery — they determine who could have witnessed what.
@@ -71,7 +74,7 @@ Title: ${template.title}
 Setting: ${template.era}, ${template.date}
 Atmosphere: ${template.atmosphere}
 
-Location placeholders used in events:
+Location placeholders used in events (you MUST create a location for each — use the exact ID as the Record key and locationId):
 ${locationPlaceholders.map((loc) => `  - ${loc}`).join('\n')}
 
 Events and where they happen:
@@ -106,6 +109,18 @@ ${validationResult.errors.map((e) => `- ${e}`).join('\n')}`
     },
     (raw) => LocationsSchema.parse(raw),
   );
+
+  // Prune any edge references (accessibleFrom, visibleFrom, audibleFrom)
+  // that point to locationIds not present in the output. This prevents the
+  // "references unknown location" class of validation errors, which are
+  // cosmetic (the LLM invented an ID it forgot to define) and would waste
+  // a retry on something that doesn't affect narrative quality.
+  const locationIds = new Set(Object.keys(locations));
+  for (const loc of Object.values(locations)) {
+    loc.accessibleFrom = loc.accessibleFrom.filter((id) => locationIds.has(id));
+    loc.visibleFrom = loc.visibleFrom.filter((id) => locationIds.has(id));
+    loc.audibleFrom = loc.audibleFrom.filter((id) => locationIds.has(id));
+  }
 
   await updateDraft(draftId, { locations });
   return state;
