@@ -210,23 +210,16 @@ export async function callModel<T>(
     // Extended thinking separates reasoning into its own content block.
     // The text block should be pure JSON, but we still run through
     // splitReasoningAndJson in case the model wrapped it in a fence.
-    let jsonStr: string;
-    let extractedReasoning: string;
+    const split = splitReasoningAndJson(text);
+    const jsonStr = split.jsonStr;
+    const rawTextPreamble = split.reasoning;
+    const extractedReasoning = reasoning
+      ? rawTextPreamble
+        ? `${reasoning}\n\n--- inline reasoning ---\n${rawTextPreamble}`
+        : reasoning
+      : rawTextPreamble;
 
-    if (reasoning) {
-      const split = splitReasoningAndJson(text);
-      jsonStr = split.jsonStr;
-      // Combine API-level reasoning with any inline reasoning (shouldn't happen, but be safe)
-      extractedReasoning = split.reasoning
-        ? `${reasoning}\n\n--- inline reasoning ---\n${split.reasoning}`
-        : reasoning;
-    } else {
-      const split = splitReasoningAndJson(text);
-      jsonStr = split.jsonStr;
-      extractedReasoning = split.reasoning;
-    }
-
-    // Log the call details
+    // Log the call details (reasoning = API extended-thinking only; rawTextPreamble = text before JSON)
     logCall({
       stepName,
       modelId,
@@ -234,8 +227,11 @@ export async function callModel<T>(
       maxAttempts: maxRetries + 1,
       latencyMs,
       usage,
-      reasoning: extractedReasoning,
-      rawText: text,
+      reasoning,
+      rawTextLength: text.length,
+      rawTextPreamble,
+      systemPrompt,
+      userPrompt,
       maxTokens,
       thinkingBudget: thinkingTokens,
     });
@@ -285,6 +281,33 @@ export async function callModel<T>(
 // Logging
 // ============================================
 
+/** CloudWatch log event size limit (256 KB). Chunk below this to avoid truncation. */
+const CLOUDWATCH_MAX_EVENT_BYTES = 256 * 1024;
+/** Chunk size in chars: leave headroom for UTF-8 and log line framing. */
+const LOG_CHUNK_CHARS = 200_000;
+
+/**
+ * Log a potentially long string in chunks so no single event exceeds CloudWatch's limit.
+ * Each chunk is prefixed with a header so readers can reassemble or skip.
+ */
+function logChunked(stepName: GenerationStep, label: string, body: string): void {
+  if (!body) return;
+  if (body.length <= LOG_CHUNK_CHARS) {
+    console.log(`[${stepName}] --- ${label} ---`);
+    console.log(body);
+    console.log(`[${stepName}] --- End ${label} ---`);
+    return;
+  }
+  const totalChunks = Math.ceil(body.length / LOG_CHUNK_CHARS);
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * LOG_CHUNK_CHARS;
+    const chunk = body.slice(start, start + LOG_CHUNK_CHARS);
+    console.log(`[${stepName}] --- ${label} (chunk ${i + 1}/${totalChunks}) ---`);
+    console.log(chunk);
+  }
+  console.log(`[${stepName}] --- End ${label} ---`);
+}
+
 interface LogCallParams {
   stepName: GenerationStep;
   modelId: string;
@@ -293,13 +316,32 @@ interface LogCallParams {
   latencyMs: number;
   usage?: TokenUsage;
   reasoning: string;
-  rawText: string;
+  /** Length of full raw text (for token estimates). */
+  rawTextLength: number;
+  /** Portion of raw response up to where parsed JSON starts (preamble only; JSON omitted). */
+  rawTextPreamble: string;
+  systemPrompt: string;
+  userPrompt: string;
   maxTokens: number;
   thinkingBudget: number;
 }
 
 function logCall(params: LogCallParams): void {
-  const { stepName, modelId, attempt, maxAttempts, latencyMs, usage, reasoning, rawText, maxTokens, thinkingBudget } = params;
+  const {
+    stepName,
+    modelId,
+    attempt,
+    maxAttempts,
+    latencyMs,
+    usage,
+    reasoning,
+    rawTextLength,
+    rawTextPreamble,
+    systemPrompt,
+    userPrompt,
+    maxTokens,
+    thinkingBudget,
+  } = params;
 
   const inputTokens = usage?.inputTokens ?? 0;
   const outputTokens = usage?.outputTokens ?? 0;
@@ -309,7 +351,7 @@ function logCall(params: LogCallParams): void {
   // The Bedrock API reports total outputTokens (thinking + text combined).
   // We can approximate text tokens from the raw response length (~4 chars/token)
   // and infer thinking tokens as the remainder.
-  const estimatedTextTokens = Math.ceil(rawText.length / 4);
+  const estimatedTextTokens = Math.ceil(rawTextLength / 4);
   const estimatedThinkingTokens = Math.max(0, outputTokens - estimatedTextTokens);
 
   // Utilisation percentages
@@ -340,23 +382,19 @@ function logCall(params: LogCallParams): void {
     }),
   );
 
-  // Reasoning (from extended thinking API)
-  if (reasoning) {
-    console.log(`[${stepName}] --- Model reasoning (extended thinking) ---`);
-    console.log(reasoning);
-    console.log(`[${stepName}] --- End reasoning ---`);
-  }
+  // Prompts (chunked if needed to stay under CloudWatch limit)
+  logChunked(stepName, 'System prompt', systemPrompt);
+  logChunked(stepName, 'User prompt', userPrompt);
 
-  // Full raw response (truncated for very long outputs)
-  const maxRawLogLength = 5000;
-  if (rawText.length > maxRawLogLength) {
-    console.log(`[${stepName}] --- Raw response (truncated to ${maxRawLogLength} chars) ---`);
-    console.log(rawText.slice(0, maxRawLogLength) + '...');
+  // Reasoning (from extended thinking API)
+  logChunked(stepName, 'Model reasoning (extended thinking)', reasoning);
+
+  // Raw response preamble only (text before JSON; JSON omitted so you can inspect in output if needed)
+  if (rawTextPreamble) {
+    logChunked(stepName, 'Raw response preamble (before JSON)', rawTextPreamble);
   } else {
-    console.log(`[${stepName}] --- Raw response ---`);
-    console.log(rawText);
+    console.log(`[${stepName}] --- Raw response preamble (before JSON) --- (none)`);
   }
-  console.log(`[${stepName}] --- End raw response ---`);
 }
 
 // ============================================
