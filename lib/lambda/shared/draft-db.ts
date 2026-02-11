@@ -45,8 +45,8 @@ export async function updateDraft(
 }
 
 /**
- * Remove the draft after a successful StoreCase. Called by StoreCase after
- * writing the case to the cases table.
+ * Remove a draft from the draft table. Not called by StoreCase (drafts are
+ * kept so retries from any step are possible); available for manual cleanup.
  */
 export async function deleteDraft(draftId: string): Promise<void> {
   await docClient.send(

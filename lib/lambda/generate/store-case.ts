@@ -1,6 +1,6 @@
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, CASES_TABLE } from '../shared/db';
-import { getDraft, deleteDraft } from '../shared/draft-db';
+import { getDraft } from '../shared/draft-db';
 import type { OperationalState } from '../shared/generation-state';
 import type { Case } from '../../types/case';
 import type { CausalEvent, EventReveal, InvolvementType, EventNecessity } from '../../types/event';
@@ -16,7 +16,8 @@ import type { Difficulty } from '../../types/common';
  * Pipeline Step 12: Store Case in DynamoDB
  *
  * Loads the draft from the draft table, assembles it into a final Case,
- * writes to the cases table, then deletes the draft.
+ * and writes to the cases table. The draft is left in place so retries
+ * from any step remain possible even after a successful store.
  */
 export const handler = async (state: OperationalState): Promise<OperationalState> => {
   const { input, draftId, validationResult } = state;
@@ -151,6 +152,5 @@ export const handler = async (state: OperationalState): Promise<OperationalState
     }),
   );
 
-  await deleteDraft(draftId);
   return state;
 };
