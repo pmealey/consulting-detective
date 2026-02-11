@@ -174,61 +174,61 @@ export class ConsultingDetectiveStack extends cdk.Stack {
 
     const computeEventKnowledgeHandler = new nodejs.NodejsFunction(this, 'ComputeEventKnowledgeHandler', {
       entry: join(__dirname, 'lambda/generate/compute-event-knowledge.ts'),
-      environment: lambdaEnvironment,
+      environment: generationEnvironment,
       ...bundlingConfig,
     });
 
     const computeFactsHandler = new nodejs.NodejsFunction(this, 'ComputeFactsHandler', {
       entry: join(__dirname, 'lambda/generate/compute-facts.ts'),
-      environment: lambdaEnvironment,
+      environment: generationEnvironment,
       ...bundlingConfig,
     });
 
     const computeOptimalPathHandler = new nodejs.NodejsFunction(this, 'ComputeOptimalPathHandler', {
       entry: join(__dirname, 'lambda/generate/compute-optimal-path.ts'),
-      environment: lambdaEnvironment,
+      environment: generationEnvironment,
       ...bundlingConfig
     });
 
     const validateCasebookHandler = new nodejs.NodejsFunction(this, 'ValidateCasebookHandler', {
       entry: join(__dirname, 'lambda/generate/validate-casebook.ts'),
-      environment: lambdaEnvironment,
+      environment: generationEnvironment,
       ...bundlingConfig,
     });
 
     const validateEventsHandler = new nodejs.NodejsFunction(this, 'ValidateEventsHandler', {
       entry: join(__dirname, 'lambda/generate/validate-events.ts'),
-      environment: lambdaEnvironment,
+      environment: generationEnvironment,
       ...bundlingConfig,
     });
 
     const validateCharactersHandler = new nodejs.NodejsFunction(this, 'ValidateCharactersHandler', {
       entry: join(__dirname, 'lambda/generate/validate-characters.ts'),
-      environment: lambdaEnvironment,
+      environment: generationEnvironment,
       ...bundlingConfig,
     });
 
     const validateLocationsHandler = new nodejs.NodejsFunction(this, 'ValidateLocationsHandler', {
       entry: join(__dirname, 'lambda/generate/validate-locations.ts'),
-      environment: lambdaEnvironment,
+      environment: generationEnvironment,
       ...bundlingConfig,
     });
 
     const validateFactsHandler = new nodejs.NodejsFunction(this, 'ValidateFactsHandler', {
       entry: join(__dirname, 'lambda/generate/validate-facts.ts'),
-      environment: lambdaEnvironment,
+      environment: generationEnvironment,
       ...bundlingConfig,
     });
 
     const validateQuestionsHandler = new nodejs.NodejsFunction(this, 'ValidateQuestionsHandler', {
       entry: join(__dirname, 'lambda/generate/validate-questions.ts'),
-      environment: lambdaEnvironment,
+      environment: generationEnvironment,
       ...bundlingConfig,
     });
 
     const storeCaseHandler = new nodejs.NodejsFunction(this, 'StoreCaseHandler', {
       entry: join(__dirname, 'lambda/generate/store-case.ts'),
-      environment: lambdaEnvironment,
+      environment: generationEnvironment,
       ...bundlingConfig,
     });
 
