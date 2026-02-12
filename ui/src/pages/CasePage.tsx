@@ -67,7 +67,14 @@ export function CasePage() {
     if (caseDate) setFactsAcknowledgedState(getFactsAcknowledged(caseDate));
   }, [caseDate]);
 
+  // On mobile, close the casebook sheet when user selects an entry/intro/facts/questions
+  useEffect(() => {
+    setCasebookSheetOpen(false);
+  }, [selectedEntryId]);
+
   const [debugOpen, setDebugOpen] = useState(false);
+  /** On mobile: casebook list is in a bottom sheet; this controls visibility. */
+  const [casebookSheetOpen, setCasebookSheetOpen] = useState(false);
 
   // Load the case and restore session
   useEffect(() => {
@@ -273,17 +280,47 @@ export function CasePage() {
             >
               Debug
             </button>
-            <h1 className="text-lg font-serif font-semibold">{gameCase.title}</h1>
+            <button
+              type="button"
+              onClick={() => setCasebookSheetOpen(true)}
+              className="lg:hidden shrink-0 px-3 py-1.5 rounded-md bg-stone-800 text-white text-sm font-medium shadow-sm hover:bg-stone-700"
+            >
+              Casebook
+            </button>
+            <h1 className="text-lg font-serif font-semibold min-w-0 truncate">{gameCase.title}</h1>
           </div>
         </div>
         {debugOpen && (
           <DebugCasePanel gameCase={gameCase} onClose={() => setDebugOpen(false)} />
         )}
 
+        {/* Mobile: backdrop for casebook sheet */}
+        <button
+          type="button"
+          aria-label="Close casebook"
+          onClick={() => setCasebookSheetOpen(false)}
+          className={`lg:hidden fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 ${
+            casebookSheetOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+        />
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 px-4 max-w-6xl w-full mx-auto">
-          {/* Sidebar: Casebook */}
-          <div className="lg:col-span-4 flex flex-col min-h-0 gap-4">
-            <div className="rounded-lg border border-stone-200 bg-white p-4 flex flex-col min-h-0 flex-1">
+          {/* Sidebar: Casebook (on mobile, fixed bottom sheet) */}
+          <div
+            className={`
+              lg:col-span-4 flex flex-col min-h-0 gap-4
+              max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-50 max-lg:max-h-[85vh]
+              max-lg:rounded-t-2xl max-lg:bg-white max-lg:shadow-2xl max-lg:flex-col
+              max-lg:transition-transform max-lg:duration-300 max-lg:ease-out
+              ${casebookSheetOpen ? 'max-lg:translate-y-0' : 'max-lg:translate-y-full'}
+            `}
+          >
+            <div className="max-lg:flex max-lg:flex-col max-lg:min-h-0 max-lg:pt-2 lg:hidden">
+              <div className="flex-shrink-0 flex justify-center pb-2">
+                <span className="block w-10 h-1 rounded-full bg-stone-300" aria-hidden />
+              </div>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-white p-4 flex flex-col min-h-0 flex-1 max-lg:border-0 max-lg:rounded-none max-lg:overflow-y-auto">
               <div className="space-y-1 mb-3">
                 <button
                   onClick={() => { setSelectedEntryId(null); setNewVisitEntryId(null); }}
