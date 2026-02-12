@@ -67,13 +67,9 @@ export function CasePage() {
     if (caseDate) setFactsAcknowledgedState(getFactsAcknowledged(caseDate));
   }, [caseDate]);
 
-  // On mobile: close the casebook sheet when user selects something; dismiss intro hint once they've chosen a view
+  // On mobile: close the casebook sheet when user selects something
   useEffect(() => {
     setCasebookSheetOpen(false);
-    if (selectedEntryId !== null) {
-      setIntroHintDismissed(true);
-      setIntroScrolledNearBottom(false);
-    }
   }, [selectedEntryId]);
 
   // Reset main content scroll to top whenever the selected entry/view changes
@@ -91,32 +87,9 @@ export function CasePage() {
     };
   }, [phase]);
 
-  // Intro scroll: show hint only once user has scrolled near the bottom
-  const THRESHOLD_PX = 120;
-  const checkIntroScroll = useCallback(() => {
-    const el = introScrollRef.current;
-    if (!el) return;
-    const { scrollTop, clientHeight, scrollHeight } = el;
-    if (scrollTop + clientHeight >= scrollHeight - THRESHOLD_PX) {
-      setIntroScrolledNearBottom(true);
-    }
-  }, []);
-  useEffect(() => {
-    const el = introScrollRef.current;
-    if (!el || selectedEntryId !== null) return;
-    checkIntroScroll(); // in case content is short and already "at bottom"
-    el.addEventListener('scroll', checkIntroScroll, { passive: true });
-    return () => el.removeEventListener('scroll', checkIntroScroll);
-  }, [selectedEntryId, checkIntroScroll]);
-
   const [debugOpen, setDebugOpen] = useState(false);
   /** On mobile: casebook list is in a bottom sheet; this controls visibility. */
   const [casebookSheetOpen, setCasebookSheetOpen] = useState(false);
-  /** On mobile intro: dismissible hint so we don't repeat it after they've seen it. */
-  const [introHintDismissed, setIntroHintDismissed] = useState(false);
-  /** True once the user has scrolled to or near the bottom of the intro (so we show the hint then). */
-  const [introScrolledNearBottom, setIntroScrolledNearBottom] = useState(false);
-  const introScrollRef = useRef<HTMLDivElement>(null);
   /** Ref on the main content scroll container so we can reset scroll when changing entry/view. */
   const contentScrollRef = useRef<HTMLDivElement>(null);
 
@@ -522,10 +495,7 @@ export function CasePage() {
               </div>
             ) : (
               <div
-                ref={(el) => {
-                  introScrollRef.current = el;
-                  (contentScrollRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-                }}
+                ref={contentScrollRef}
                 className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto"
               >
                 <div className="p-6 space-y-4">
@@ -567,35 +537,6 @@ export function CasePage() {
                             </li>
                           ))}
                       </ul>
-                    </div>
-                  )}
-
-                  {/* Mobile-only hint when viewing intro: show after they've scrolled near the bottom */}
-                  {!introHintDismissed && selectedEntryId === null && introScrolledNearBottom && (
-                    <div className="lg:hidden rounded-lg border-2 border-amber-200 bg-amber-50 p-4 flex items-start gap-3 border-t border-stone-200 pt-4">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-amber-900">
-                          Next: choose where to investigate
-                        </p>
-                        <p className="text-xs text-amber-800 mt-0.5">
-                          Open your casebook to see locations you can visit.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setCasebookSheetOpen(true)}
-                        className="shrink-0 px-3 py-1.5 rounded-md bg-amber-700 text-white text-sm font-medium hover:bg-amber-800"
-                      >
-                        Open casebook
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIntroHintDismissed(true)}
-                        className="shrink-0 p-1 text-amber-600 hover:text-amber-800 rounded"
-                        aria-label="Dismiss"
-                      >
-                        ×
-                      </button>
                     </div>
                   )}
                 </div>
