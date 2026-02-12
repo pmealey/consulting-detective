@@ -25,7 +25,7 @@ export async function putDraft(draftId: string, draft: DraftCase): Promise<void>
   await docClient.send(
     new PutCommand({
       TableName: DRAFT_CASES_TABLE,
-      Item: { draft, draftId },
+      Item: { ...draft, draftId },
     }),
   );
 }
