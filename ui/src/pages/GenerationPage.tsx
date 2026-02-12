@@ -67,6 +67,12 @@ interface DraftListItem {
   lastStepStartedAt?: string;
   lastValidationResult?: ValidationResult;
   caseSummary: CaseSummary;
+  /** When published, this becomes the case versionId. */
+  versionId?: string;
+  /** If forked, the source draft's ID. */
+  forkedFrom?: string;
+  /** Step at which this draft was forked. */
+  forkedAtStep?: string;
 }
 
 const POLL_INTERVAL_MS = 8000;
@@ -235,7 +241,7 @@ function DraftCard({
 
   return (
     <div className="rounded-lg border border-stone-200 bg-white shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-stone-200 bg-stone-50 flex flex-wrap items-center gap-2">
+        <div className="px-4 py-3 border-b border-stone-200 bg-stone-50 flex flex-wrap items-center gap-2">
         <span className="font-mono text-sm text-stone-600 truncate max-w-[14rem]" title={draft.draftId}>
           {draft.draftId}
         </span>
@@ -243,6 +249,14 @@ function DraftCard({
           {draft.status}
         </span>
         <span className="text-xs text-stone-400">{formatDateTime(draft.startDate)}</span>
+        {draft.forkedFrom && (
+          <span className="text-xs text-stone-500" title={`Forked from ${draft.forkedFrom} at ${draft.forkedAtStep ?? '?'}`}>
+            Forked from <span className="font-mono">{draft.forkedFrom.slice(0, 8)}…</span>
+            {draft.forkedAtStep && (
+              <> at {STEP_LABELS[draft.forkedAtStep] ?? draft.forkedAtStep}</>
+            )}
+          </span>
+        )}
       </div>
       <div className="p-4 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -284,6 +298,15 @@ function DraftCard({
               </p>
             </div>
           )}
+          <div className="sm:col-span-2">
+            <span className="text-stone-500">Version</span>
+            <p className="text-sm text-stone-700 mt-0.5">
+              {draft.versionId ?? draft.draftId}
+              <span className="text-stone-500 ml-1">
+                (case version when published)
+              </span>
+            </p>
+          </div>
         </div>
 
         {!hasTemplate && (

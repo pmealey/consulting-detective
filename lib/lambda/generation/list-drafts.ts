@@ -108,6 +108,12 @@ export interface DraftListItem {
   lastStepStartedAt?: string;
   lastValidationResult?: StepValidationResult;
   caseSummary: CaseSummary;
+  /** When published, this draftId becomes the case versionId. */
+  versionId?: string;
+  /** If this draft was forked, the source draft's ID. */
+  forkedFrom?: string;
+  /** Step at which this draft was forked (re-generation started here). */
+  forkedAtStep?: PipelineStep;
 }
 
 function executionArn(stateMachineArn: string, executionId: string): string {
@@ -197,6 +203,9 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         lastStepStartedAt: draft.lastStepStartedAt,
         lastValidationResult: draft.lastValidationResult,
         caseSummary,
+        versionId: draftId,
+        forkedFrom: draft.forkedFrom,
+        forkedAtStep: draft.forkedAtStep,
       });
     }
 
