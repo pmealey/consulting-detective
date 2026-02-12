@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.ts';
 import {
@@ -67,14 +67,41 @@ export function CasePage() {
     if (caseDate) setFactsAcknowledgedState(getFactsAcknowledged(caseDate));
   }, [caseDate]);
 
-  // On mobile, close the casebook sheet when user selects an entry/intro/facts/questions
+  // On mobile: close the casebook sheet when user selects something; dismiss intro hint once they've chosen a view
   useEffect(() => {
     setCasebookSheetOpen(false);
+    if (selectedEntryId !== null) {
+      setIntroHintDismissed(true);
+      setIntroScrolledNearBottom(false);
+    }
   }, [selectedEntryId]);
+
+  // Intro scroll: show hint only once user has scrolled near the bottom
+  const THRESHOLD_PX = 120;
+  const checkIntroScroll = useCallback(() => {
+    const el = introScrollRef.current;
+    if (!el) return;
+    const { scrollTop, clientHeight, scrollHeight } = el;
+    if (scrollTop + clientHeight >= scrollHeight - THRESHOLD_PX) {
+      setIntroScrolledNearBottom(true);
+    }
+  }, []);
+  useEffect(() => {
+    const el = introScrollRef.current;
+    if (!el || selectedEntryId !== null) return;
+    checkIntroScroll(); // in case content is short and already "at bottom"
+    el.addEventListener('scroll', checkIntroScroll, { passive: true });
+    return () => el.removeEventListener('scroll', checkIntroScroll);
+  }, [selectedEntryId, checkIntroScroll]);
 
   const [debugOpen, setDebugOpen] = useState(false);
   /** On mobile: casebook list is in a bottom sheet; this controls visibility. */
   const [casebookSheetOpen, setCasebookSheetOpen] = useState(false);
+  /** On mobile intro: dismissible hint so we don't repeat it after they've seen it. */
+  const [introHintDismissed, setIntroHintDismissed] = useState(false);
+  /** True once the user has scrolled to or near the bottom of the intro (so we show the hint then). */
+  const [introScrolledNearBottom, setIntroScrolledNearBottom] = useState(false);
+  const introScrollRef = useRef<HTMLDivElement>(null);
 
   // Load the case and restore session
   useEffect(() => {
@@ -267,7 +294,7 @@ export function CasePage() {
         : null;
 
     return (
-      <div className="fixed inset-x-0 top-0 bottom-6 flex flex-col overflow-hidden bg-stone-50">
+      <div className="fixed inset-x-0 top-0 bottom-0 flex flex-col overflow-hidden bg-stone-50">
         <div className="flex items-center justify-between shrink-0 px-4 py-2 max-w-6xl w-full mx-auto">
           <Link to="/" className="text-sm text-stone-500 hover:text-stone-700">
             &larr; Back to cases
@@ -283,7 +310,8 @@ export function CasePage() {
             <button
               type="button"
               onClick={() => setCasebookSheetOpen(true)}
-              className="lg:hidden shrink-0 px-3 py-1.5 rounded-md bg-stone-800 text-white text-sm font-medium shadow-sm hover:bg-stone-700"
+              className="lg:hidden shrink-0 px-3 py-1.5 rounded-md bg-stone-200 text-stone-800 text-sm font-medium border border-stone-300 hover:bg-stone-300"
+              aria-label="Open casebook to choose a location to visit"
             >
               Casebook
             </button>
@@ -304,7 +332,7 @@ export function CasePage() {
           }`}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 px-4 max-w-6xl w-full mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 px-4 max-w-6xl w-full mx-auto pb-2">
           {/* Sidebar: Casebook (on mobile, fixed bottom sheet) */}
           <div
             className={`
@@ -467,7 +495,10 @@ export function CasePage() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto">
+              <div
+                ref={introScrollRef}
+                className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto"
+              >
                 <div className="p-6 space-y-4">
                   <div className="flex items-center gap-3 flex-wrap">
                     <h2 className="text-xl font-serif font-semibold">{gameCase.title}</h2>
@@ -509,11 +540,51 @@ export function CasePage() {
                       </ul>
                     </div>
                   )}
+
+                  {/* Mobile-only hint when viewing intro: show after they've scrolled near the bottom */}
+                  {!introHintDismissed && selectedEntryId === null && introScrolledNearBottom && (
+                    <div className="lg:hidden rounded-lg border-2 border-amber-200 bg-amber-50 p-4 flex items-start gap-3 border-t border-stone-200 pt-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-amber-900">
+                          Next: choose where to investigate
+                        </p>
+                        <p className="text-xs text-amber-800 mt-0.5">
+                          Open your casebook to see locations you can visit.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCasebookSheetOpen(true)}
+                        className="shrink-0 px-3 py-1.5 rounded-md bg-amber-700 text-white text-sm font-medium hover:bg-amber-800"
+                      >
+                        Open casebook
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIntroHintDismissed(true)}
+                        className="shrink-0 p-1 text-amber-600 hover:text-amber-800 rounded"
+                        aria-label="Dismiss"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </div>
         </div>
+
+        {/* Mobile: persistent bottom bar – primary action to choose where to go */}
+        <button
+          type="button"
+          onClick={() => setCasebookSheetOpen(true)}
+          className="lg:hidden shrink-0 w-full px-4 py-3.5 bg-stone-800 text-white text-center font-medium shadow-[0_-2px_8px_rgba(0,0,0,0.08)] flex items-center justify-center gap-2"
+          aria-label="Choose a location to visit"
+        >
+          <span>Choose a location to visit</span>
+          <span className="inline-block text-stone-400" aria-hidden>↑</span>
+        </button>
       </div>
     );
   }
