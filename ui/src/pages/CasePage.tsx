@@ -76,6 +76,21 @@ export function CasePage() {
     }
   }, [selectedEntryId]);
 
+  // Reset main content scroll to top whenever the selected entry/view changes
+  useEffect(() => {
+    contentScrollRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+  }, [selectedEntryId]);
+
+  // Lock document scroll while on case page (only inner panels scroll). Reduces address bar show/hide.
+  useEffect(() => {
+    if (phase !== 'investigation') return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [phase]);
+
   // Intro scroll: show hint only once user has scrolled near the bottom
   const THRESHOLD_PX = 120;
   const checkIntroScroll = useCallback(() => {
@@ -102,6 +117,8 @@ export function CasePage() {
   /** True once the user has scrolled to or near the bottom of the intro (so we show the hint then). */
   const [introScrolledNearBottom, setIntroScrolledNearBottom] = useState(false);
   const introScrollRef = useRef<HTMLDivElement>(null);
+  /** Ref on the main content scroll container so we can reset scroll when changing entry/view. */
+  const contentScrollRef = useRef<HTMLDivElement>(null);
 
   // Load the case and restore session
   useEffect(() => {
@@ -294,7 +311,7 @@ export function CasePage() {
         : null;
 
     return (
-      <div className="fixed inset-x-0 top-0 bottom-0 flex flex-col overflow-hidden bg-stone-50">
+      <div className="fixed inset-x-0 top-0 flex flex-col overflow-hidden bg-stone-50 h-[100svh] min-h-0">
         <div className="flex items-center justify-between shrink-0 px-4 py-2 max-w-6xl w-full mx-auto">
           <Link to="/" className="text-sm text-stone-500 hover:text-stone-700">
             &larr; Back to cases
@@ -447,7 +464,10 @@ export function CasePage() {
           {/* Main content: Selected entry or Facts */}
           <div className="lg:col-span-8 min-h-0 flex flex-col">
             {selectedEntry ? (
-              <div className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto">
+              <div
+                ref={contentScrollRef}
+                className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto"
+              >
                 <div className="p-6">
                   <CasebookEntryView
                     entry={selectedEntry}
@@ -459,7 +479,10 @@ export function CasePage() {
                 </div>
               </div>
             ) : isFactsView ? (
-              <div className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto">
+              <div
+                ref={contentScrollRef}
+                className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto"
+              >
                 <div className="p-6">
                   <FactsList
                     facts={gameCase.facts}
@@ -471,7 +494,10 @@ export function CasePage() {
                 </div>
               </div>
             ) : isQuestionsView ? (
-              <div className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto">
+              <div
+                ref={contentScrollRef}
+                className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto"
+              >
                 <div className="p-6">
                   {session && session.completedAt && result && session.answers?.length ? (
                     <QuestionsAnsweredView
@@ -496,7 +522,10 @@ export function CasePage() {
               </div>
             ) : (
               <div
-                ref={introScrollRef}
+                ref={(el) => {
+                  introScrollRef.current = el;
+                  (contentScrollRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+                }}
                 className="rounded-lg border border-stone-200 bg-white flex-1 min-h-0 overflow-y-auto"
               >
                 <div className="p-6 space-y-4">
