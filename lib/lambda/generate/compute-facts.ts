@@ -475,7 +475,7 @@ function ensureDirectedReachability(
       const bridgeId = `fact_bridge_${bridgeCharId}_to_${targetSubject}`;
       const bridge: FactSkeleton = {
         factId: bridgeId,
-        subjects: [bridgeCharId, targetSubject],
+        subjects: [targetSubject],
         veracity: 'true',
         source: {
           type: 'bridge',
@@ -510,7 +510,7 @@ function ensureDirectedReachability(
       const bridgeId = `fact_bridge_${bridgeCharId}_to_${targetSubject}`;
       const bridge: FactSkeleton = {
         factId: bridgeId,
-        subjects: [bridgeCharId, targetSubject],
+        subjects: [targetSubject],
         veracity: 'true',
         source: {
           type: 'bridge',

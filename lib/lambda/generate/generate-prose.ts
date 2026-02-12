@@ -48,8 +48,18 @@ export const handler = async (state: OperationalState): Promise<OperationalState
     .join('\n');
 
   const sceneGuidelines = `Scene-writing guidelines:
-- Each scene should be 150-400 words.
+- Scene length should scale with the number of facts to reveal. Aim for roughly 40-50 words per fact, with a minimum of 150 words and a maximum of 800 words. A 3-fact entry needs ~150 words; a 12-fact entry needs ~500-600 words. Every fact must be covered.
 - The player is the detective visiting this location/person. Write in second person ("You arrive at...") where describing the scene, third person for dialogue.
+
+## Entry Types — CHARACTER vs LOCATION
+
+There are two kinds of entries, and they require different scene styles:
+
+- For CHARACTER entries (entryId starts with "entry_char_"): the scene is an interview. The detective speaks with the character, who reveals (or conceals) facts through dialogue. Focus on conversation, body language, and what the character says or avoids saying.
+- For LOCATION entries (entryId starts with "entry_loc_"): the scene is a pure physical investigation. The detective investigates alone — no characters are present. Describe what the detective sees, hears, and finds. Mention spatial connections naturally — what can be seen from here, what sounds carry from nearby, what paths lead where. Facts are discovered through evidence, documents, environmental details, and observation — never through dialogue.
+
+## Character Knowledge and Fact Revelation
+
 - Characters should speak in their distinctive tone (use their register, vocabulary, and quirks).
 - Characters reveal facts they KNOW about naturally through dialogue or observation.
 - Characters who SUSPECT something should hint at it indirectly.
@@ -58,13 +68,19 @@ export const handler = async (state: OperationalState): Promise<OperationalState
 - Characters who BELIEVE a false fact should state it confidently as truth.
 - Physical evidence facts should be woven into environmental descriptions.
 - Include fact veracity awareness: false facts (veracity: "false") should be presented as if true by characters who believe them.
+
+## Tone and Style
+
 - Never tell the player the significance of what they've found — let them connect the dots.
 - The prose should reward careful reading without being obtuse.
 - Maintain the narrative tone: ${template.narrativeTone}.
 - Maintain the atmospheric mood: ${template.atmosphere}.
 - Keep each character's current status in mind. Characters who cannot be met or interviewed (e.g. deceased, missing) must NOT appear as speaking or interactable.
 - Avoid common AI writing tells like em-dashes, asterisks, or excessive line breaks.
-- Locations that are accessible, visible, or audible from this one should be mentioned in the scene.
+
+## Fact Coverage (CRITICAL)
+
+- After writing each scene, verify that every fact in the entry's "Facts to reveal" list is described or referenced in the prose. If any are missing, revise the scene to include them. The player discovers facts by reading — if a fact is not in the prose, the player cannot learn it.
 
 Mystery Style Prose Constraints (CRITICAL — the mystery style is "${template.mysteryStyle}"):
 ${getMysteryStyleProseConstraints(template.mysteryStyle)}`;
@@ -176,13 +192,16 @@ function buildEntryContext(
     .map((fid) => facts[fid])
     .filter(Boolean);
 
-  return `Entry "${entry.entryId}" (${entry.label}, ${entry.address}):
+  const isCharEntry = entry.entryId.startsWith('entry_char_');
+  const entryType = isCharEntry ? 'CHARACTER (interview)' : 'LOCATION (physical investigation)';
+
+  return `Entry "${entry.entryId}" [${entryType}] (${entry.label}, ${entry.address}):
   Location: ${entry.locationId} — ${location.name} — ${location?.description ?? ''}
   Accessible from: ${location?.accessibleFrom.map((id) => `${id} — ${locations[id]?.name ?? id}`).join(', ') ?? ''}
   Visible from: ${location?.visibleFrom.map((id) => `${id} — ${locations[id]?.name ?? id}`).join(', ') ?? ''}
   Audible from: ${location?.audibleFrom.map((id) => `${id} — ${locations[id]?.name ?? id}`).join(', ') ?? ''}
   Characters present: ${presentChars.map((c) => `${c.name} (${c.mysteryRole}, ${c.societalRole}, tone: ${c.tone.register}, vocab: [${c.tone.vocabulary.join(', ')}]${c.tone.quirk ? `, quirk: ${c.tone.quirk}` : ''})`).join('; ') || 'none'}
-  Facts to reveal: ${revealedFacts.map((f) => `${f.factId}: "${f.description}" (veracity: ${f.veracity})`).join('; ')}
+  Facts to reveal (${revealedFacts.length}): ${revealedFacts.map((f) => `${f.factId}: "${f.description}" (veracity: ${f.veracity})`).join('; ')}
   Character knowledge at this entry:
 ${presentChars.map((c) => {
   const relevantKnowledge = entry.revealsFactIds

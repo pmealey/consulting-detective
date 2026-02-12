@@ -86,11 +86,15 @@ Each entry must match this schema:
 
 3. **Characters present** (the \`characterIds\` array): Decide which characters are physically present at each entry. Rules:
    - You MUST use the exact characterId strings from the Characters list below (e.g. "char_inspector_lestrade"). Do NOT use character names, do NOT invent IDs.
-   - Characters should be present at entries where they can plausibly be found and interviewed.
-   - A character's entry should include that character (unless their currentStatus prevents it — e.g. deceased, missing).
-   - Location entries may have 0 or more characters present — whoever would plausibly be there.
+   - LOCATION entries must have an EMPTY characterIds array ([]). Location scenes are pure physical investigation — no characters present.
+   - A CHARACTER entry should include that character (unless their currentStatus prevents it — e.g. deceased, missing). A character's characterIds array should contain ONLY that character.
    - Characters who are deceased, missing, or otherwise unavailable should NOT be listed as present anywhere.
-   - A character can be present at multiple entries if it makes sense.
+
+4. **Entry types** — CHARACTER entries and LOCATION entries serve different purposes:
+   - CHARACTER entries are interviews. The scene focuses on dialogue with the character, who reveals or conceals facts through conversation.
+   - LOCATION entries are pure physical investigations. The scene focuses on searching the space, examining evidence, and observing the environment. No characters are present — the detective investigates alone.
+   - A character entry and a location entry MAY share the same address if the character is found at that location. They are separate visits with different purposes.
+   - A character's currentStatus affects how their entry works: e.g. a deceased character's entry is about examining their belongings or the scene of their death, not interviewing them.
 
 ## WHAT YOU MUST NOT CHANGE
 

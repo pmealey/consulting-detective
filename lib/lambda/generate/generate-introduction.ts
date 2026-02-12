@@ -85,7 +85,8 @@ The introduction facts are the seeds of the entire investigation. Choose careful
 
 ## Introduction Writing Guidelines
 
-- Set the scene: where the player is summoned, who called them in, what the initial situation appears to be.
+- The introduction MUST establish why the player character is the one investigating. They do not need to be a professional detective — they could be an amateur, a family member, a journalist, a guest who happened to be present, or anyone with a plausible reason. What matters is that the reader understands why THIS person is investigating rather than someone else. In an isolated mystery, they may already be at the location. In a sprawling mystery, they may have been hired or drawn in by circumstance. Make it feel natural to the mystery style and setting.
+- The introduction MUST describe or reference every introduction fact it reveals. Each selected fact should be clearly conveyed in the prose — the player learns these facts by reading the introduction, so none can be omitted. After writing, verify that every factId in your introductionFactIds array is represented in the prose.
 - Establish the atmosphere, era, and narrative tone.
 - Weave the introduction facts naturally into the prose — the player should learn these facts by reading the introduction, not from a bullet list.
 - Give the player just enough to start investigating, but don't give away the solution.

@@ -70,8 +70,13 @@ Your response must end with valid JSON: a Record<factId, { description, category
 - Be specific and concrete: "The victim owed Blackwood £400" not "The victim had debts."
 - For **false facts** (veracity: "false"): write the description as the misinformation itself — what the lying/mistaken character would claim. It should sound plausible.
 - For **denial** facts: the false fact should be a plausible counter-narrative to the denied true fact. Look at the denied fact's context to craft a convincing lie.
-- For **bridge** facts: create a natural connection between the two subjects (e.g. a relationship, a shared history, a rumor).
+- For **bridge** facts: create a natural connection between the source and a subject (e.g. a relationship, a shared history, a rumor).
 - For **red herring** facts: create something interesting but ultimately irrelevant — a suspicious detail, an old grudge, a coincidence.
+- Descriptions must not spoil the mystery or imply conclusions. State only the observable fact, not its significance or implications. The player should connect the dots themselves.
+  - BAD: "The back gate was left unlocked, which would have allowed the killer to enter unseen" (spells out the implication)
+  - GOOD: "The back gate was left unlocked that evening" (the player infers the rest)
+  - BAD: "Margaret stood to inherit the entire estate, giving her a clear motive" (editorializes)
+  - GOOD: "Margaret is the sole beneficiary of the estate" (player draws the conclusion)
 - Category should match the nature of the fact, not just its source.
 - Think about how facts form a coherent mystery narrative. Facts from the same event should tell a consistent story.`;
 
@@ -187,7 +192,7 @@ function formatSkeletonForPrompt(
       const toSubjectName = characters?.[skeleton.source.toSubject]?.name
         ?? locations?.[skeleton.source.toSubject]?.name
         ?? skeleton.source.toSubject;
-      sourceContext = `Bridge fact: connects ${fromChar?.name ?? skeleton.source.fromCharacterId} to ${toSubjectName}. Create a natural connection (relationship, shared history, rumor, etc.)`;
+      sourceContext = `Bridge fact: connects ${fromChar?.name ?? skeleton.source.fromCharacterId} to ${toSubjectName}. Create a natural connection (relationship, shared history, rumor, etc.). The fact must be about ${toSubjectName}, not ${fromChar?.name ?? skeleton.source.fromCharacterId}.`;
       break;
     }
     case 'red_herring': {

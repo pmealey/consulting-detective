@@ -93,7 +93,14 @@ Your job is to START from the baseline and MODIFY entries based on character per
 - Names should fit the era: ${template.era}.
 - Names should be what the character will be known by during the investigation, not necessarily what their real name is.
 - Avoid stereotypes. Make characters feel like real people with contradictions.
-- Set currentStatus only when it affects whether or how the character can be met during the investigation. Omit for characters with no such constraint.
+- Set currentStatus only when it affects whether or how the character can be met during the investigation. Omit for characters with no such constraint. Common statuses and their effects on the investigation:
+  - "deceased": cannot be interviewed; their casebook entry becomes about examining their belongings, their room, or the scene of their death.
+  - "missing": cannot be found; their entry might be their empty home or workplace, with clues left behind.
+  - "imprisoned": can only be visited at a prison or jail; conversation is constrained and monitored.
+  - "hospitalized" or "ill": can only be visited at hospital or home; may be unreliable, confused, or medicated.
+  - "traveling": unavailable in person; their entry might be their office or home, with a proxy or correspondence.
+  - "in hiding": requires special access or knowledge to locate; adds a layer of difficulty.
+  - "under suspicion": cooperative but guarded; aware they are being watched.
 - societalRole must be their job or station in society (Landlady, Servant, Business partner, Inspector). Never put mystery labels (Victim, Witness, Suspect) in societalRole — those go in "mysteryRole" only.`;
 
   const validationResult = state.validationResult;
