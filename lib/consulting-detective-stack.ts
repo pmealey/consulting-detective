@@ -712,6 +712,24 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     generationStateMachine.grantRead(executionDetailHandler);
     draftCasesTable.grantReadData(executionDetailHandler);
 
+    // Fork draft + start new pipeline execution (console-invoked only)
+    const forkDraftHandler = new nodejs.NodejsFunction(this, 'ForkDraftHandler', {
+      entry: join(__dirname, 'lambda/generate/fork-draft.ts'),
+      environment: generationTrackingEnvironment,
+      ...generationLambdaConfig,
+    });
+    draftCasesTable.grantReadWriteData(forkDraftHandler);
+    generationStateMachine.grantStartExecution(forkDraftHandler);
+
+    // Publish draft to Cases table (console-invoked only)
+    const publishDraftHandler = new nodejs.NodejsFunction(this, 'PublishDraftHandler', {
+      entry: join(__dirname, 'lambda/generate/publish-draft.ts'),
+      environment: generationEnvironment,
+      ...generationLambdaConfig,
+    });
+    draftCasesTable.grantReadData(publishDraftHandler);
+    casesTable.grantReadWriteData(publishDraftHandler);
+
     // ============================================
     // Grant DynamoDB Permissions
     // ============================================

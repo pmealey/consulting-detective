@@ -5,6 +5,7 @@ import {
   getSession,
   createSession,
   saveSession,
+  clearSession,
   computeResult,
 } from '../storage/session.ts';
 import { CasebookList } from '../components/CasebookList.tsx';
@@ -44,6 +45,14 @@ function setFactsAcknowledged(caseDate: string): void {
   }
 }
 
+function clearFactsAcknowledged(caseDate: string): void {
+  try {
+    localStorage.removeItem(`${FACTS_ACK_KEY_PREFIX}${caseDate}`);
+  } catch {
+    // ignore
+  }
+}
+
 export function CasePage() {
   const { caseDate } = useParams<{ caseDate: string }>();
 
@@ -53,6 +62,9 @@ export function CasePage() {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CaseResult | null>(null);
+
+  /** Set when the case was republished and we reset progress; show a dismissible message. */
+  const [versionChangedMessage, setVersionChangedMessage] = useState<string | null>(null);
 
   // Track which entries are newly visited this click (for showing revealed facts)
   const [newVisitEntryId, setNewVisitEntryId] = useState<string | null>(null);
@@ -102,15 +114,32 @@ export function CasePage() {
         if (res.success) {
           setGameCase(res.data);
 
-          // Check for existing session
           const existing = getSession(caseDate);
           const introIds = res.data.introductionFactIds ?? [];
-          // Collect subjects from introduction facts
           const introSubjects = [...new Set(
             introIds.flatMap((fid) => res.data.facts[fid]?.subjects ?? []),
           )];
+          const caseVersionId = res.data.versionId;
+
+          // Detect version change: case has versionId and either (1) session has no versionId
+          // (old session — assume version changed and reset) or (2) session version differs.
+          const versionChanged =
+            caseVersionId != null &&
+            existing != null &&
+            (existing.versionId == null || existing.versionId !== caseVersionId);
+
+          if (versionChanged) {
+            clearSession(caseDate);
+            clearFactsAcknowledged(caseDate);
+            setFactsAcknowledgedState(false);
+            const newSession = createSession(caseDate, introIds, introSubjects, caseVersionId);
+            setSession(newSession);
+            setVersionChangedMessage('This case was updated. Your progress has been reset. Sorry.');
+            setPhase('investigation');
+            return;
+          }
+
           if (existing) {
-            // Ensure intro facts and subjects are in session (merge for old saves)
             const mergedFacts = [...new Set([...introIds, ...existing.discoveredFacts])];
             const existingSubjects = existing.discoveredSubjects ?? [];
             const mergedSubjects = [...new Set([...introSubjects, ...existingSubjects])];
@@ -123,7 +152,6 @@ export function CasePage() {
             if (needsUpdate) saveSession(sessionToUse);
             setSession(sessionToUse);
             if (existing.completedAt) {
-              // Already completed -- show investigation with answers in Questions card
               setResult(computeResult(sessionToUse, res.data));
               setPhase('investigation');
               setSelectedEntryId(QUESTIONS_VIEW_ID);
@@ -131,8 +159,7 @@ export function CasePage() {
               setPhase('investigation');
             }
           } else {
-            // No session yet -- create one seeded with intro facts and subjects
-            setSession(createSession(caseDate, introIds, introSubjects));
+            setSession(createSession(caseDate, introIds, introSubjects, caseVersionId));
             setPhase('investigation');
           }
         } else {
@@ -310,6 +337,20 @@ export function CasePage() {
         </div>
         {debugOpen && (
           <DebugCasePanel gameCase={gameCase} onClose={() => setDebugOpen(false)} />
+        )}
+
+        {versionChangedMessage && (
+          <div className="mx-4 max-w-6xl w-full flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-amber-900">
+            <p className="text-sm">{versionChangedMessage}</p>
+            <button
+              type="button"
+              onClick={() => setVersionChangedMessage(null)}
+              className="shrink-0 text-amber-700 hover:text-amber-900 font-medium text-sm"
+              aria-label="Dismiss"
+            >
+              Dismiss
+            </button>
+          </div>
         )}
 
         {/* Mobile: backdrop for casebook sheet */}

@@ -3,6 +3,15 @@ import type { Case } from '@shared/index';
 
 const SESSION_PREFIX = 'cd-session-';
 
+/** Remove the saved session for a case date (e.g. when version changed). */
+export function clearSession(caseDate: string): void {
+  try {
+    localStorage.removeItem(`${SESSION_PREFIX}${caseDate}`);
+  } catch {
+    // ignore
+  }
+}
+
 /** Get a player session for a specific case date. */
 export function getSession(caseDate: string): PlayerSession | null {
   try {
@@ -38,11 +47,12 @@ export function getAllSessions(): Record<string, PlayerSession> {
   return sessions;
 }
 
-/** Create a new session for a case. Optionally seed with intro facts and their subjects. */
+/** Create a new session for a case. Optionally seed with intro facts, subjects, and case versionId. */
 export function createSession(
   caseDate: string,
   introductionFactIds?: string[],
   introductionSubjects?: string[],
+  versionId?: string,
 ): PlayerSession {
   const session: PlayerSession = {
     caseDate,
@@ -51,6 +61,7 @@ export function createSession(
     discoveredSubjects: introductionSubjects ?? [],
     answers: [],
     startedAt: new Date().toISOString(),
+    versionId,
   };
   saveSession(session);
   return session;

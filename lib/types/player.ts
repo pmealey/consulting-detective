@@ -28,6 +28,12 @@ export interface PlayerSession {
 
   /** ISO timestamp when the player completed the case (submitted answers) */
   completedAt?: string;
+
+  /**
+   * versionId of the case when this session was created/loaded.
+   * Used to detect when the case was republished and reset progress.
+   */
+  versionId?: string;
 }
 
 export interface PlayerAnswer {

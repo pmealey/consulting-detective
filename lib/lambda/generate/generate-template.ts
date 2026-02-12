@@ -65,6 +65,7 @@ const SETTING_FLAVORS = [
 export const handler = async (state: OperationalState): Promise<OperationalState> => {
   const { input, draftId } = state;
   await updateDraft(draftId, {
+    input,
     currentStep: 'generateTemplate',
     lastStepStartedAt: new Date().toISOString(),
   });

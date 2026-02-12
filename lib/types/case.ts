@@ -24,6 +24,13 @@ export interface Case {
   /** The daily key, e.g. "2026-02-07" -- partition key in DDB */
   caseDate: string;
 
+  /**
+   * Identifies this published version of the case. When the case is republished
+   * (e.g. after a fork), this changes. The UI uses it to detect version changes
+   * and reset player progress with a message.
+   */
+  versionId?: string;
+
   /** Display title, e.g. "The Affair of the Missing Ledger" */
   title: string;
 

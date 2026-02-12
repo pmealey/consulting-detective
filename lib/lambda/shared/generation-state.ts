@@ -29,6 +29,29 @@ export const PIPELINE_STEPS = [
 
 export type PipelineStep = (typeof PIPELINE_STEPS)[number];
 
+/**
+ * Maps each pipeline step to the DraftCase content fields it produces.
+ * Used by forkDraft to know which fields to keep (steps before fromStep) and
+ * which to strip (fromStep and later). Metadata (draftId, input, forkedFrom,
+ * forkedAtStep) and tracking (currentStep, lastStepStartedAt, lastValidationResult)
+ * are handled separately.
+ */
+export const STEP_DRAFT_FIELDS: Record<PipelineStep, (keyof DraftCase)[]> = {
+  generateTemplate: ['template'],
+  generateEvents: ['events'],
+  computeEventKnowledge: ['computedKnowledge'],
+  generateCharacters: ['characters', 'roleMapping'],
+  generateLocations: ['locations'],
+  computeFacts: ['factSkeletons', 'factGraph'],
+  generateFacts: ['facts'],
+  generateIntroduction: ['introductionFactIds', 'introduction', 'title'],
+  generateCasebook: ['casebook'],
+  generateProse: ['prose'],
+  generateQuestions: ['questions'],
+  computeOptimalPath: ['optimalPath'],
+  storeCase: [],
+};
+
 // ============================================
 // Model Configuration
 // ============================================
@@ -70,14 +93,20 @@ export const GenerateCaseInputSchema = z.object({
 // ============================================
 // Draft case (stored in DynamoDB draft table)
 //
-// Case content only — no input. Input (caseDate, modelConfig, etc.) lives
-// in OperationalState. Each step reads the draft, merges its output, and
-// writes the draft back. Keyed by draftId (execution ID).
+// Each step reads the draft, merges its output, and writes the draft back.
+// Keyed by draftId (execution ID). Input is persisted by the first step so
+// drafts carry the generation parameters that produced them (e.g. for fork).
 // ============================================
 
 export interface DraftCase {
   /** Set when the draft is loaded from the table (partition key). */
   draftId: string;
+  /** The generation input that produced this draft. Persisted by the first pipeline step. */
+  input?: GenerateCaseInput;
+  /** If this draft was forked, the source draft's ID */
+  forkedFrom?: string;
+  /** The step this draft was forked at (re-generation started here) */
+  forkedAtStep?: PipelineStep;
   template?: CaseTemplate;
   events?: Record<string, EventDraft>;
   computedKnowledge?: ComputedKnowledge;

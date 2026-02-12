@@ -1,6 +1,11 @@
 import { GetCommand, PutCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, DRAFT_CASES_TABLE } from './db';
-import type { DraftCase } from './generation-state';
+import {
+  PIPELINE_STEPS,
+  STEP_DRAFT_FIELDS,
+  type DraftCase,
+  type PipelineStep,
+} from './generation-state';
 
 /**
  * Load the draft case for a generation run. Returns null if no draft exists yet
@@ -70,4 +75,55 @@ export async function deleteDraft(draftId: string): Promise<void> {
       Key: { draftId },
     }),
   );
+}
+
+/**
+ * Fork a draft: copy content from steps before fromStep into a new draft,
+ * set lineage (forkedFrom, forkedAtStep), and copy input from the source.
+ * Used to re-run the pipeline from fromStep onward on a new draftId while
+ * leaving the original draft unchanged.
+ */
+export async function forkDraft(
+  sourceDraftId: string,
+  newDraftId: string,
+  fromStep: PipelineStep,
+): Promise<DraftCase> {
+  const source = await getDraft(sourceDraftId);
+  if (!source) throw new Error(`Source draft not found: ${sourceDraftId}`);
+
+  const fromIndex = PIPELINE_STEPS.indexOf(fromStep);
+  if (fromIndex < 0) throw new Error(`Unknown pipeline step: ${fromStep}`);
+
+  const fieldsToStrip = new Set<keyof DraftCase>();
+  for (let i = fromIndex; i < PIPELINE_STEPS.length; i++) {
+    const step = PIPELINE_STEPS[i];
+    for (const field of STEP_DRAFT_FIELDS[step]) {
+      fieldsToStrip.add(field);
+    }
+  }
+
+  const forked: DraftCase = {
+    draftId: newDraftId,
+    input: source.input,
+    forkedFrom: sourceDraftId,
+    forkedAtStep: fromStep,
+    currentStep: fromStep,
+    lastStepStartedAt: new Date().toISOString(),
+    lastValidationResult: undefined,
+  };
+
+  const skipKeys = new Set([
+    'draftId', 'input', 'forkedFrom', 'forkedAtStep',
+    'currentStep', 'lastStepStartedAt', 'lastValidationResult',
+  ]);
+  for (const [key, value] of Object.entries(source)) {
+    if (skipKeys.has(key)) continue;
+    if (fieldsToStrip.has(key as keyof DraftCase)) continue;
+    if (value !== undefined) {
+      (forked as unknown as Record<string, unknown>)[key] = value;
+    }
+  }
+
+  await putDraft(newDraftId, forked);
+  return forked;
 }
