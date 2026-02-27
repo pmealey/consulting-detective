@@ -35,7 +35,7 @@ const SETTING_FLAVORS = [
   // Sci-fi
   'Space station, orbital habitat, or generation ship',
   'Cyberpunk megacity (neon-lit, corporate-dominated, street-level crime)',
-  'Solarpunk or utopian community hiding dark secrets',
+  'Solarpunk or utopian community (simple, mundane crime with personal stakes)',
   'Frontier colony on Mars, the Moon, or an exoplanet',
   // Fantasy & speculative
   'High fantasy kingdom or empire (courts, guilds, magic)',
