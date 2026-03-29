@@ -783,6 +783,18 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       autoDeleteObjects: true,
     });
 
+    // Allow any CloudFront distribution in this account to read from the bucket (for gateway stack)
+    websiteBucket.addToResourcePolicy(new iam.PolicyStatement({
+      actions: ['s3:GetObject'],
+      resources: [websiteBucket.arnForObjects('*')],
+      principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
+      conditions: {
+        StringEquals: {
+          'AWS:SourceAccount': this.account,
+        },
+      },
+    }));
+
     // ============================================
     // CloudFront Distribution
     // ============================================
@@ -913,6 +925,12 @@ function handler(event) {
       description: 'API Gateway URL',
     });
 
+    new cdk.CfnOutput(this, 'ApiId', {
+      value: api.restApiId,
+      description: 'API Gateway ID',
+      exportName: 'ConsultingDetectiveApiId',
+    });
+
     new cdk.CfnOutput(this, 'WebsiteUrl', {
       value: `https://${distribution.distributionDomainName}`,
       description: 'CloudFront Website URL',
@@ -926,6 +944,7 @@ function handler(event) {
     new cdk.CfnOutput(this, 'WebsiteBucketName', {
       value: websiteBucket.bucketName,
       description: 'S3 Website Bucket Name',
+      exportName: 'ConsultingDetectiveBucketName',
     });
 
     new cdk.CfnOutput(this, 'GenerationStateMachineArn', {
