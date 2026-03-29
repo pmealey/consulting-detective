@@ -1,5 +1,4 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
-import { basename } from './config/base-path.ts'
 import { Home } from './pages/Home.tsx'
 import { CasePage } from './pages/CasePage.tsx'
 import { GenerationPage } from './pages/GenerationPage.tsx'
@@ -35,7 +34,7 @@ function AppLayout() {
 
 function App() {
   return (
-    <BrowserRouter basename={basename}>
+    <BrowserRouter basename="/consulting-detective">
       <AppLayout />
     </BrowserRouter>
   )

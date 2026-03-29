@@ -842,7 +842,7 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       code: cloudfront.FunctionCode.fromInline(`
 function handler(event) {
   var request = event.request;
-  request.uri = request.uri.replace(/^\\/api/, '');
+  request.uri = request.uri.replace(/^\\/consulting-detective\\/api/, '').replace(/^\\/api/, '');
   if (!request.uri.startsWith('/')) {
     request.uri = '/' + request.uri;
   }
@@ -874,19 +874,30 @@ function handler(event) {
             eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
           }],
         },
+        '/consulting-detective/api/*': {
+          origin: apiOrigin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: apiOriginRequestPolicy,
+          functionAssociations: [{
+            function: apiRewriteFunction,
+            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+          }],
+        },
       },
-      defaultRootObject: 'index.html',
+      defaultRootObject: 'consulting-detective/index.html',
       errorResponses: [
         {
           httpStatus: 404,
           responseHttpStatus: 200,
-          responsePagePath: '/index.html',
+          responsePagePath: '/consulting-detective/index.html',
           ttl: cdk.Duration.minutes(5),
         },
         {
           httpStatus: 403,
           responseHttpStatus: 200,
-          responsePagePath: '/index.html',
+          responsePagePath: '/consulting-detective/index.html',
           ttl: cdk.Duration.minutes(5),
         },
       ],
@@ -894,10 +905,11 @@ function handler(event) {
       comment: 'Consulting Detective Website Distribution',
     });
 
-    // Deploy website files to S3
+    // Deploy website files to S3 under consulting-detective/ prefix
     new s3deploy.BucketDeployment(this, 'DeployWebsite', {
       sources: [s3deploy.Source.asset(join(__dirname, '../ui/dist'))],
       destinationBucket: websiteBucket,
+      destinationKeyPrefix: 'consulting-detective/',
       distribution,
       distributionPaths: ['/*'],
     });
