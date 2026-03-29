@@ -777,8 +777,6 @@ export class ConsultingDetectiveStack extends cdk.Stack {
 
     const websiteBucket = new s3.Bucket(this, 'WebsiteBucket', {
       bucketName: `consulting-detective-website-${this.account}`,
-      websiteIndexDocument: 'index.html',
-      websiteErrorDocument: 'index.html',
       publicReadAccess: false,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -788,12 +786,6 @@ export class ConsultingDetectiveStack extends cdk.Stack {
     // ============================================
     // CloudFront Distribution
     // ============================================
-
-    const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, 'OAI', {
-      comment: 'OAI for Consulting Detective website',
-    });
-
-    websiteBucket.grantRead(originAccessIdentity);
 
     const responseHeadersPolicy = new cloudfront.ResponseHeadersPolicy(this, 'SecurityHeadersPolicy', {
       responseHeadersPolicyName: 'ConsultingDetectiveSecurityHeaders',
@@ -853,9 +845,7 @@ function handler(event) {
 
     const distribution = new cloudfront.Distribution(this, 'WebsiteDistribution', {
       defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessIdentity(websiteBucket, {
-          originAccessIdentity,
-        }),
+        origin: origins.S3BucketOrigin.withOriginAccessControl(websiteBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
         cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD_OPTIONS,
