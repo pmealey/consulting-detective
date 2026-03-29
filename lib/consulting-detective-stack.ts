@@ -6,8 +6,6 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
-import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
-import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -789,131 +787,17 @@ export class ConsultingDetectiveStack extends cdk.Stack {
       resources: [websiteBucket.arnForObjects('*')],
       principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
       conditions: {
-        StringEquals: {
-          'AWS:SourceAccount': this.account,
+        StringLike: {
+          'AWS:SourceArn': `arn:aws:cloudfront::${this.account}:distribution/*`,
         },
       },
     }));
-
-    // ============================================
-    // CloudFront Distribution
-    // ============================================
-
-    const responseHeadersPolicy = new cloudfront.ResponseHeadersPolicy(this, 'SecurityHeadersPolicy', {
-      responseHeadersPolicyName: 'ConsultingDetectiveSecurityHeaders',
-      comment: 'Security headers for Consulting Detective',
-      customHeadersBehavior: {
-        customHeaders: [
-          {
-            header: 'X-Robots-Tag',
-            value: 'noindex, nofollow, noarchive, nosnippet',
-            override: true,
-          },
-        ],
-      },
-      securityHeadersBehavior: {
-        contentTypeOptions: { override: true },
-        frameOptions: { frameOption: cloudfront.HeadersFrameOption.DENY, override: true },
-        referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
-        strictTransportSecurity: {
-          accessControlMaxAge: cdk.Duration.seconds(31536000),
-          includeSubdomains: true,
-          override: true,
-        },
-        xssProtection: { protection: true, modeBlock: true, override: true },
-      },
-    });
-
-    // API Gateway origin for /api/* requests
-    const apiDomain = `${api.restApiId}.execute-api.${this.region}.amazonaws.com`;
-    const apiOrigin = new origins.HttpOrigin(apiDomain, {
-      originPath: `/${api.deploymentStage.stageName}`,
-      protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
-    });
-
-    // Origin request policy — forward query strings and Content-Type to API Gateway
-    const apiOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, 'ApiOriginRequestPolicy', {
-      originRequestPolicyName: 'ConsultingDetective-ApiOriginRequest',
-      comment: 'Forward query strings to API Gateway',
-      cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
-      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList('Content-Type'),
-      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
-    });
-
-    // CloudFront Function to strip /api prefix so API Gateway sees the real path
-    const apiRewriteFunction = new cloudfront.Function(this, 'ApiRewriteFunction', {
-      functionName: 'ConsultingDetective-ApiRewrite',
-      code: cloudfront.FunctionCode.fromInline(`
-function handler(event) {
-  var request = event.request;
-  request.uri = request.uri.replace(/^\\/consulting-detective\\/api/, '').replace(/^\\/api/, '');
-  if (!request.uri.startsWith('/')) {
-    request.uri = '/' + request.uri;
-  }
-  return request;
-}
-      `),
-    });
-
-    const distribution = new cloudfront.Distribution(this, 'WebsiteDistribution', {
-      defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessControl(websiteBucket),
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
-        cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD_OPTIONS,
-        compress: true,
-        responseHeadersPolicy,
-      },
-      additionalBehaviors: {
-        '/api/*': {
-          origin: apiOrigin,
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
-          originRequestPolicy: apiOriginRequestPolicy,
-          functionAssociations: [{
-            function: apiRewriteFunction,
-            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
-          }],
-        },
-        '/consulting-detective/api/*': {
-          origin: apiOrigin,
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
-          originRequestPolicy: apiOriginRequestPolicy,
-          functionAssociations: [{
-            function: apiRewriteFunction,
-            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
-          }],
-        },
-      },
-      defaultRootObject: 'consulting-detective/index.html',
-      errorResponses: [
-        {
-          httpStatus: 404,
-          responseHttpStatus: 200,
-          responsePagePath: '/consulting-detective/index.html',
-          ttl: cdk.Duration.minutes(5),
-        },
-        {
-          httpStatus: 403,
-          responseHttpStatus: 200,
-          responsePagePath: '/consulting-detective/index.html',
-          ttl: cdk.Duration.minutes(5),
-        },
-      ],
-      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
-      comment: 'Consulting Detective Website Distribution',
-    });
 
     // Deploy website files to S3 under consulting-detective/ prefix
     new s3deploy.BucketDeployment(this, 'DeployWebsite', {
       sources: [s3deploy.Source.asset(join(__dirname, '../ui/dist'))],
       destinationBucket: websiteBucket,
       destinationKeyPrefix: 'consulting-detective/',
-      distribution,
-      distributionPaths: ['/*'],
     });
 
     // ============================================
@@ -929,16 +813,6 @@ function handler(event) {
       value: api.restApiId,
       description: 'API Gateway ID',
       exportName: 'ConsultingDetectiveApiId',
-    });
-
-    new cdk.CfnOutput(this, 'WebsiteUrl', {
-      value: `https://${distribution.distributionDomainName}`,
-      description: 'CloudFront Website URL',
-    });
-
-    new cdk.CfnOutput(this, 'DistributionId', {
-      value: distribution.distributionId,
-      description: 'CloudFront Distribution ID',
     });
 
     new cdk.CfnOutput(this, 'WebsiteBucketName', {
